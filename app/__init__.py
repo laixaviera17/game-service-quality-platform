@@ -1,0 +1,1 @@
+"""Game Service Quality Platform."""
