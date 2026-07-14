@@ -9,7 +9,7 @@ def main() -> None:
         connection.execute("DELETE FROM activities")
         connection.executemany(
             "INSERT INTO players(player_id, nickname, gem_balance) VALUES (?, ?, ?)",
-            [("player_001", "Traveler", 0), ("player_002", "Paimon", 20)],
+            [("player_001", "测试账号A", 0), ("player_002", "测试账号B", 20)],
         )
         connection.executemany(
             """INSERT INTO activities(activity_id, name, reward_gems, stock, status)
