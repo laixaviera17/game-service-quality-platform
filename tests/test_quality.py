@@ -17,3 +17,32 @@ def test_quality_check_reports_duplicate_reward():
     duplicate = next(item for item in report["findings"] if item["rule"] == "duplicate_reward")
     assert duplicate["count"] == 1
     assert duplicate["passed"] is False
+    assert duplicate["samples"] == [
+        {"player_id": "p1", "activity_id": "a1", "grant_count": 2}
+    ]
+
+
+def test_quality_check_returns_diagnostic_samples_for_invalid_data():
+    with connect() as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("PRAGMA ignore_check_constraints = TRUE")
+        connection.execute("INSERT INTO players VALUES ('p1', 'Tester', -1)")
+        connection.execute("INSERT INTO activities VALUES ('a1', 'Login', 100, 5, 'archived')")
+        connection.execute(
+            """INSERT INTO reward_grants
+               (player_id, activity_id, idempotency_key, reward_gems, status)
+               VALUES ('missing-player', 'missing-activity', 'orphan-key', 100, 'success')"""
+        )
+
+    report = run_quality_check()
+    findings = {item["rule"]: item for item in report["findings"]}
+
+    assert findings["orphan_grant"]["samples"] == [
+        {"grant_id": 1, "player_id": "missing-player", "activity_id": "missing-activity"}
+    ]
+    assert findings["invalid_activity_status"]["samples"] == [
+        {"activity_id": "a1", "status": "archived"}
+    ]
+    assert findings["negative_balance"]["samples"] == [
+        {"player_id": "p1", "gem_balance": -1}
+    ]

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .database import initialize_database
 from .quality import run_quality_check
-from .service import GrantError, grant_reward, inventory, serialize
+from .service import GrantError, GrantNotFoundError, grant_reward, inventory, serialize
 
 
 @asynccontextmanager
@@ -37,6 +37,8 @@ def health() -> dict[str, str]:
 def grant(activity_id: str, body: GrantRequest, idempotency_key: str = Header(min_length=8)):
     try:
         result = grant_reward(body.player_id, activity_id, idempotency_key)
+    except GrantNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
     except GrantError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return serialize(result)
@@ -46,7 +48,7 @@ def grant(activity_id: str, body: GrantRequest, idempotency_key: str = Header(mi
 def get_inventory(player_id: str):
     try:
         return inventory(player_id)
-    except GrantError as error:
+    except GrantNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 

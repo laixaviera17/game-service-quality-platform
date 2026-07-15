@@ -11,7 +11,11 @@
       #summary { display: flex; gap: 12px; margin: 28px 0; flex-wrap: wrap; }
       .metric, .rule { border: 1px solid #263758; border-radius: 12px; background: #18233a; padding: 18px; }
       .metric { min-width: 150px; } .metric strong { display: block; font-size: 28px; }
-      .rule { margin: 10px 0; display: flex; justify-content: space-between; }
+      .rule { margin: 10px 0; display: flex; justify-content: space-between; gap: 16px; }
+      .rule-detail { min-width: 0; } .badge { border-radius: 999px; font-size: 12px; padding: 2px 8px; text-transform: uppercase; }
+      .critical { background: #5b2335; color: #ffb3bd; } .high { background: #5d3c25; color: #ffd0a1; } .medium { background: #594e28; color: #ffe59a; }
+      pre { overflow: auto; margin: 10px 0 0; color: #cbd8ef; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #updated-at { margin-top: -18px; } #error { color: #ff9eaa; }
       .passed { color: #53d7a3; } .failed { color: #ff8c98; }
     </style>
   </head>
@@ -20,17 +24,35 @@
       <h1>游戏服务质量看板</h1>
       <p class="muted">活动奖励发放 · 数据质量规则执行结果</p>
       <section id="summary"></section>
+      <p id="updated-at" class="muted"></p>
       <section id="rules"></section>
+      <p id="error" role="alert"></p>
     </main>
     <script>
-      fetch('/quality/check').then(r => r.json()).then(report => {
-        document.querySelector('#summary').innerHTML = [
-          ['规则数', report.summary.rules], ['失败规则', report.summary.failed_rules], ['问题总数', report.summary.total_findings]
-        ].map(([name, value]) => `<div class="metric"><span>${name}</span><strong>${value}</strong></div>`).join('');
-        document.querySelector('#rules').innerHTML = report.findings.map(item => `
-          <article class="rule"><div><strong>${item.rule}</strong><br><span class="muted">${item.description}</span></div>
-          <div class="${item.passed ? 'passed' : 'failed'}">${item.passed ? '通过' : `发现 ${item.count} 项`}</div></article>`).join('');
-      });
+      const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
+      const renderSamples = samples => samples.length
+        ? `<pre>${escapeHtml(JSON.stringify(samples, null, 2))}</pre>`
+        : '';
+
+      fetch('/quality/check')
+        .then(response => {
+          if (!response.ok) throw new Error(`请求失败（${response.status}）`);
+          return response.json();
+        })
+        .then(report => {
+          document.querySelector('#summary').innerHTML = [
+            ['规则数', report.summary.rules], ['失败规则', report.summary.failed_rules], ['问题总数', report.summary.total_findings]
+          ].map(([name, value]) => `<div class="metric"><span>${name}</span><strong>${value}</strong></div>`).join('');
+          document.querySelector('#updated-at').textContent = `检查时间：${new Date(report.generated_at).toLocaleString()}`;
+          document.querySelector('#rules').innerHTML = report.findings.map(item => `
+            <article class="rule"><div class="rule-detail"><strong>${escapeHtml(item.rule)}</strong>
+              <span class="badge ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><br>
+              <span class="muted">${escapeHtml(item.description)}</span>${renderSamples(item.samples)}</div>
+              <div class="${item.passed ? 'passed' : 'failed'}">${item.passed ? '通过' : `发现 ${item.count} 项`}</div></article>`).join('');
+        })
+        .catch(error => {
+          document.querySelector('#error').textContent = `无法加载质量报告：${error.message}`;
+        });
     </script>
   </body>
 </html>

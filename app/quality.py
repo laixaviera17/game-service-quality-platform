@@ -13,8 +13,15 @@ QUALITY_RULES = {
 }
 
 
+SAMPLE_LIMIT = 3
+
+
 def _count(connection, statement: str) -> int:
     return int(connection.execute(statement).fetchone()[0])
+
+
+def _samples(connection, statement: str) -> list[dict[str, object]]:
+    return [dict(row) for row in connection.execute(statement).fetchmany(SAMPLE_LIMIT)]
 
 
 def run_quality_check() -> dict[str, object]:
@@ -32,6 +39,13 @@ def run_quality_check() -> dict[str, object]:
                         GROUP BY player_id, activity_id HAVING COUNT(*) > 1
                     )""",
                 ),
+                "samples": _samples(
+                    connection,
+                    """SELECT player_id, activity_id, COUNT(*) AS grant_count
+                    FROM reward_grants WHERE status = 'success'
+                    GROUP BY player_id, activity_id HAVING COUNT(*) > 1
+                    ORDER BY grant_count DESC, player_id, activity_id""",
+                ),
             },
             {
                 "rule": "orphan_grant",
@@ -43,6 +57,15 @@ def run_quality_check() -> dict[str, object]:
                     LEFT JOIN activities a ON a.activity_id = rg.activity_id
                     WHERE p.player_id IS NULL OR a.activity_id IS NULL""",
                 ),
+                "samples": _samples(
+                    connection,
+                    """SELECT rg.grant_id, rg.player_id, rg.activity_id
+                    FROM reward_grants rg
+                    LEFT JOIN players p ON p.player_id = rg.player_id
+                    LEFT JOIN activities a ON a.activity_id = rg.activity_id
+                    WHERE p.player_id IS NULL OR a.activity_id IS NULL
+                    ORDER BY rg.grant_id""",
+                ),
             },
             {
                 "rule": "invalid_activity_status",
@@ -51,6 +74,11 @@ def run_quality_check() -> dict[str, object]:
                     connection,
                     "SELECT COUNT(*) FROM activities WHERE status NOT IN ('active', 'inactive')",
                 ),
+                "samples": _samples(
+                    connection,
+                    """SELECT activity_id, status FROM activities
+                    WHERE status NOT IN ('active', 'inactive') ORDER BY activity_id""",
+                ),
             },
             {
                 "rule": "negative_balance",
@@ -58,6 +86,11 @@ def run_quality_check() -> dict[str, object]:
                 "count": _count(
                     connection,
                     "SELECT COUNT(*) FROM players WHERE gem_balance < 0",
+                ),
+                "samples": _samples(
+                    connection,
+                    """SELECT player_id, gem_balance FROM players
+                    WHERE gem_balance < 0 ORDER BY gem_balance, player_id""",
                 ),
             },
         ]

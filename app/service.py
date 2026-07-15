@@ -20,6 +20,10 @@ class GrantError(Exception):
     pass
 
 
+class GrantNotFoundError(GrantError):
+    """Raised when the requested player or activity does not exist."""
+
+
 def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> GrantResult:
     """Grant one activity reward atomically and make retries safe."""
     initialize_database()
@@ -39,7 +43,7 @@ def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> Gran
             "SELECT player_id FROM players WHERE player_id = ?", (player_id,)
         ).fetchone()
         if not player:
-            raise GrantError("玩家不存在")
+            raise GrantNotFoundError("玩家不存在")
 
         activity = connection.execute(
             """SELECT activity_id, reward_gems, stock, status FROM activities
@@ -47,7 +51,7 @@ def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> Gran
             (activity_id,),
         ).fetchone()
         if not activity:
-            raise GrantError("活动不存在")
+            raise GrantNotFoundError("活动不存在")
         if activity["status"] != "active":
             raise GrantError("活动未开启")
         if activity["stock"] <= 0:
@@ -83,7 +87,7 @@ def inventory(player_id: str) -> dict[str, object]:
             (player_id,),
         ).fetchone()
     if not player:
-        raise GrantError("玩家不存在")
+        raise GrantNotFoundError("玩家不存在")
     return dict(player)
 
 

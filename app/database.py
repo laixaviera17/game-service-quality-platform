@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from collections.abc import Iterator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -15,11 +17,20 @@ def database_path() -> Path:
     return path
 
 
-def connect() -> sqlite3.Connection:
+@contextmanager
+def connect() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path())
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    try:
+        yield connection
+    except BaseException:
+        connection.rollback()
+        raise
+    else:
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def initialize_database() -> None:

@@ -29,3 +29,43 @@ def test_grant_api_rejects_missing_idempotency_key():
     seed()
     response = TestClient(app).post("/activities/a1/rewards/grant", json={"player_id": "p1"})
     assert response.status_code == 422
+
+
+def test_grant_api_returns_404_for_unknown_player_or_activity():
+    seed()
+    client = TestClient(app)
+    headers = {"Idempotency-Key": "api-request-404"}
+
+    unknown_player = client.post(
+        "/activities/a1/rewards/grant", json={"player_id": "missing"}, headers=headers
+    )
+    unknown_activity = client.post(
+        "/activities/missing/rewards/grant", json={"player_id": "p1"}, headers=headers
+    )
+
+    assert unknown_player.status_code == 404
+    assert unknown_player.json() == {"detail": "玩家不存在"}
+    assert unknown_activity.status_code == 404
+    assert unknown_activity.json() == {"detail": "活动不存在"}
+
+
+def test_grant_api_reports_conflict_without_changing_inventory():
+    seed()
+    client = TestClient(app)
+    headers = {"Idempotency-Key": "api-request-conflict"}
+    client.post("/activities/a1/rewards/grant", json={"player_id": "p1"}, headers=headers)
+    second = client.post(
+        "/activities/a1/rewards/grant",
+        json={"player_id": "p1"},
+        headers={"Idempotency-Key": "api-request-other"},
+    )
+    conflict = client.post(
+        "/activities/a1/rewards/grant",
+        json={"player_id": "p1"},
+        headers={"Idempotency-Key": "api-request-last"},
+    )
+
+    assert second.status_code == 201
+    assert conflict.status_code == 409
+    assert conflict.json() == {"detail": "奖励库存不足"}
+    assert client.get("/players/p1/inventory").json()["gem_balance"] == 200
