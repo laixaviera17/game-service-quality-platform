@@ -1,4 +1,11 @@
-from app.test_runner import create_test_run, execute_test_run, get_test_run, list_test_runs
+from app.test_runner import (
+    create_test_run,
+    execute_test_run,
+    get_test_run,
+    list_test_runs,
+    rerun_test_run,
+    get_test_run_trend,
+)
 from app.task_queue import celery_app
 
 
@@ -29,3 +36,30 @@ def test_service_test_run_history_returns_newest_first():
     assert first < second
     assert items[0]["run_id"] == second
     assert items[0]["status"] == "queued"
+
+
+def test_selected_scenarios_and_parameters_are_persisted_and_reused():
+    run_id = create_test_run(
+        trigger="test",
+        case_codes=["normal_grant", "stock_race"],
+        options={"stock": 2, "per_player_limit": 2, "player_status": "active"},
+    )
+    report = execute_test_run(run_id)
+
+    assert report["summary"] == {"total_cases": 2, "passed_cases": 2, "failed_cases": 0}
+    assert report["config"] == {
+        "case_codes": ["normal_grant", "stock_race"],
+        "options": {"stock": 2, "per_player_limit": 2, "player_status": "active"},
+    }
+    rerun_id = rerun_test_run(run_id)
+    assert get_test_run(rerun_id)["config"] == report["config"]
+
+
+def test_trend_aggregates_completed_runs():
+    run_id = create_test_run(trigger="test", case_codes=["normal_grant"])
+    execute_test_run(run_id)
+    trend = get_test_run_trend(limit=5)
+
+    assert trend["total_runs"] == 1
+    assert trend["passed_runs"] == 1
+    assert trend["pass_rate"] == 100.0

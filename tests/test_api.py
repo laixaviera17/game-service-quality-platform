@@ -122,6 +122,45 @@ def test_service_test_run_api_executes_and_persists_case_evidence():
     assert history.json()["items"][0]["run_id"] == run_id
 
 
+def test_test_workbench_apis_accept_config_show_trend_and_rerun():
+    client = TestClient(app)
+    scenarios = client.get("/test-scenarios")
+    created = client.post(
+        "/test-runs",
+        json={"case_codes": ["normal_grant"], "stock": 2, "per_player_limit": 2, "player_status": "active"},
+    )
+
+    assert scenarios.status_code == 200
+    assert len(scenarios.json()["items"]) == 5
+    assert created.status_code == 201
+    run_id = created.json()["run_id"]
+    detail = client.get(f"/test-runs/{run_id}")
+    assert detail.json()["config"]["options"]["stock"] == 2
+    assert detail.json()["summary"]["total_cases"] == 1
+    trend = client.get("/test-runs/trend")
+    assert trend.status_code == 200
+    assert trend.json()["total_runs"] == 1
+    rerun = client.post(f"/test-runs/{run_id}/rerun")
+    assert rerun.status_code == 201
+    assert rerun.json()["run_id"] != run_id
+
+
+def test_fault_injection_can_be_checked_and_cleaned():
+    client = TestClient(app)
+    catalog = client.get("/demo/faults")
+    created = client.post("/demo/faults", json={"fault_type": "duplicate_reward"})
+    report = client.post("/quality/runs")
+    cleared = client.delete("/demo/faults")
+    recovered = client.post("/quality/runs")
+
+    assert catalog.status_code == 200
+    assert created.status_code == 201
+    assert report.json()["status"] == "failed"
+    assert next(item for item in report.json()["findings"] if item["rule"] == "duplicate_reward")["count"] == 1
+    assert cleared.status_code == 200
+    assert recovered.json()["status"] == "passed"
+
+
 def test_api_validates_blank_player_and_missing_inventory():
     seed()
     client = TestClient(app)

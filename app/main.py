@@ -8,10 +8,18 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .database import initialize_database
+from .demo_faults import clear_faults, fault_catalog, inject_fault
 from .quality import get_quality_run, list_quality_runs, run_quality_check
 from .service import GrantError, GrantNotFoundError, grant_reward, inventory, serialize
 from .task_queue import dispatch_test_run
-from .test_runner import create_test_run, get_test_run, list_test_runs
+from .test_runner import (
+    available_scenarios,
+    create_test_run,
+    get_test_run,
+    list_test_runs,
+    rerun_test_run,
+    get_test_run_trend,
+)
 
 
 @asynccontextmanager
@@ -28,6 +36,17 @@ DASHBOARD = Path(__file__).resolve().parents[1] / "dashboard.html"
 
 class GrantRequest(BaseModel):
     player_id: str = Field(min_length=1, examples=["player_001"])
+
+
+class TestRunRequest(BaseModel):
+    case_codes: list[str] | None = None
+    stock: int = Field(default=1, ge=1, le=10)
+    per_player_limit: int = Field(default=1, ge=1, le=3)
+    player_status: str = Field(default="suspended", pattern="^(active|suspended)$")
+
+
+class FaultRequest(BaseModel):
+    fault_type: str
 
 
 @app.get("/health")
@@ -85,9 +104,22 @@ def quality_run_detail(run_id: int):
     return report
 
 
+@app.get("/test-scenarios")
+def test_scenarios():
+    return {"items": available_scenarios()}
+
+
 @app.post("/test-runs", status_code=201)
-def create_service_test_run():
-    run_id = create_test_run(trigger="api")
+def create_service_test_run(body: TestRunRequest | None = None):
+    body = body or TestRunRequest()
+    try:
+        run_id = create_test_run(
+            trigger="api",
+            case_codes=body.case_codes,
+            options={"stock": body.stock, "per_player_limit": body.per_player_limit, "player_status": body.player_status},
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     dispatch_status = dispatch_test_run(run_id)
     report = get_test_run(run_id)
     if not report:
@@ -102,12 +134,47 @@ def service_test_runs(limit: int = 12):
     return {"items": list_test_runs(limit=max(1, min(limit, 50)))}
 
 
+@app.get("/test-runs/trend")
+def service_test_trend(limit: int = 12):
+    return get_test_run_trend(limit=max(1, min(limit, 50)))
+
+
 @app.get("/test-runs/{run_id}")
 def service_test_run_detail(run_id: int):
     report = get_test_run(run_id)
     if not report:
         raise HTTPException(status_code=404, detail="测试运行不存在")
     return report
+
+
+@app.post("/test-runs/{run_id}/rerun", status_code=201)
+def rerun_service_test(run_id: int):
+    try:
+        new_run_id = rerun_test_run(run_id)
+    except GrantNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    dispatch_status = dispatch_test_run(new_run_id)
+    if dispatch_status == "queued":
+        return {"run_id": new_run_id, "status": "queued", "message": f"已按运行 #{run_id} 的配置重新提交"}
+    return get_test_run(new_run_id)
+
+
+@app.get("/demo/faults")
+def demo_fault_types():
+    return {"items": fault_catalog()}
+
+
+@app.post("/demo/faults", status_code=201)
+def create_demo_fault(body: FaultRequest):
+    try:
+        return inject_fault(body.fault_type)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.delete("/demo/faults")
+def delete_demo_faults():
+    return {"deleted_grants": clear_faults()}
 
 
 @app.get("/dashboard")

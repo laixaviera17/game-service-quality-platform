@@ -100,6 +100,13 @@ test_runs = Table(
     Column("failed_cases", Integer, nullable=False, server_default="0"),
     Column("error_message", Text),
 )
+test_run_configs = Table(
+    "test_run_configs",
+    metadata,
+    Column("run_id", Integer, ForeignKey("test_runs.run_id"), primary_key=True),
+    Column("scenario_codes_json", Text, nullable=False),
+    Column("options_json", Text, nullable=False),
+)
 test_case_results = Table(
     "test_case_results",
     metadata,
