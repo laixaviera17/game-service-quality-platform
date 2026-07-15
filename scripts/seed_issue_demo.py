@@ -20,6 +20,11 @@ def seed_issue_demo_data() -> None:
         connection.execute(
             """INSERT INTO reward_grants
                (player_id, activity_id, idempotency_key, reward_gems, status)
+               VALUES ('player_002', 'event_summer', 'demo-reward-mismatch-001', 99, 'success')"""
+        )
+        connection.execute(
+            """INSERT INTO reward_grants
+               (player_id, activity_id, idempotency_key, reward_gems, status)
                VALUES ('missing-player', 'missing-activity', 'demo-orphan-001', 160, 'success')"""
         )
         connection.execute(
@@ -27,6 +32,12 @@ def seed_issue_demo_data() -> None:
         )
         connection.execute(
             "UPDATE players SET gem_balance = -10 WHERE player_id = 'player_002'"
+        )
+        connection.execute(
+            "UPDATE activities SET stock = 97 WHERE activity_id = 'event_summer'"
+        )
+        connection.execute(
+            "UPDATE activities SET stock = 27 WHERE activity_id = 'event_stock_check'"
         )
 
 

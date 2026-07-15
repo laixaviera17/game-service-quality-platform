@@ -13,7 +13,7 @@ def test_quality_run_snapshot_is_unchanged_after_local_data_resets():
     passed_snapshot = get_quality_run(passed_run["run_id"])
 
     assert failed_snapshot["status"] == "failed"
-    assert failed_snapshot["summary"]["failed_rules"] == 4
+    assert failed_snapshot["summary"]["failed_rules"] == 6
     assert passed_snapshot["status"] == "passed"
     assert passed_snapshot["summary"]["failed_rules"] == 0
 
@@ -31,7 +31,7 @@ def test_quality_run_history_returns_newest_run_first_and_respects_limit():
             "trigger": "test",
             "generated_at": second["generated_at"],
             "status": "passed",
-            "summary": {"rules": 4, "failed_rules": 0, "total_findings": 0},
+            "summary": {"rules": 6, "failed_rules": 0, "total_findings": 0},
         }
     ]
     assert first["run_id"] < second["run_id"]

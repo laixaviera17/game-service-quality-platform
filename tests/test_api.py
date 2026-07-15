@@ -6,8 +6,12 @@ from app.main import app
 
 def seed() -> None:
     with connect() as connection:
-        connection.execute("INSERT INTO players VALUES ('p1', 'Tester', 0)")
-        connection.execute("INSERT INTO activities VALUES ('a1', 'Login', 100, 2, 'active')")
+        connection.execute("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)")
+        connection.execute(
+            """INSERT INTO activities
+               (activity_id, name, reward_gems, stock, initial_stock, status)
+               VALUES ('a1', 'Login', 100, 2, 2, 'active')"""
+        )
 
 
 def test_grant_api_is_idempotent():
@@ -49,26 +53,20 @@ def test_grant_api_returns_404_for_unknown_player_or_activity():
     assert unknown_activity.json() == {"detail": "活动不存在"}
 
 
-def test_grant_api_reports_conflict_without_changing_inventory():
+def test_grant_api_reports_claim_limit_without_changing_inventory():
     seed()
     client = TestClient(app)
     headers = {"Idempotency-Key": "api-request-conflict"}
     client.post("/activities/a1/rewards/grant", json={"player_id": "p1"}, headers=headers)
-    second = client.post(
+    limit_reached = client.post(
         "/activities/a1/rewards/grant",
         json={"player_id": "p1"},
         headers={"Idempotency-Key": "api-request-other"},
     )
-    conflict = client.post(
-        "/activities/a1/rewards/grant",
-        json={"player_id": "p1"},
-        headers={"Idempotency-Key": "api-request-last"},
-    )
 
-    assert second.status_code == 201
-    assert conflict.status_code == 409
-    assert conflict.json() == {"detail": "奖励库存不足"}
-    assert client.get("/players/p1/inventory").json()["gem_balance"] == 200
+    assert limit_reached.status_code == 409
+    assert limit_reached.json() == {"detail": "玩家领取次数已达活动上限"}
+    assert client.get("/players/p1/inventory").json()["gem_balance"] == 100
 
 
 def test_health_quality_report_and_dashboard_are_available():
@@ -80,7 +78,7 @@ def test_health_quality_report_and_dashboard_are_available():
 
     assert health.json() == {"status": "ok"}
     assert report.status_code == 200
-    assert report.json()["summary"]["rules"] == 4
+    assert report.json()["summary"]["rules"] == 6
     assert dashboard.status_code == 200
     assert "Game QA Console" in dashboard.text
 
@@ -106,3 +104,19 @@ def test_quality_run_api_returns_404_for_missing_run():
     response = TestClient(app).get("/quality/runs/999")
     assert response.status_code == 404
     assert response.json() == {"detail": "质量检查记录不存在"}
+
+
+def test_api_validates_blank_player_and_missing_inventory():
+    seed()
+    client = TestClient(app)
+
+    blank_player = client.post(
+        "/activities/a1/rewards/grant",
+        json={"player_id": ""},
+        headers={"Idempotency-Key": "api-request-blank"},
+    )
+    missing_inventory = client.get("/players/missing/inventory")
+
+    assert blank_player.status_code == 422
+    assert missing_inventory.status_code == 404
+    assert missing_inventory.json() == {"detail": "玩家不存在"}

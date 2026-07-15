@@ -7,12 +7,12 @@ def test_valid_demo_data_passes_all_quality_rules():
     seed_demo_data()
     report = run_quality_check()
 
-    assert report["summary"] == {"rules": 4, "failed_rules": 0, "total_findings": 0}
+    assert report["summary"] == {"rules": 6, "failed_rules": 0, "total_findings": 0}
 
 
 def test_issue_demo_data_exercises_every_quality_rule():
     seed_issue_demo_data()
     report = run_quality_check()
 
-    assert report["summary"] == {"rules": 4, "failed_rules": 4, "total_findings": 4}
+    assert report["summary"] == {"rules": 6, "failed_rules": 6, "total_findings": 6}
     assert all(not item["passed"] for item in report["findings"])

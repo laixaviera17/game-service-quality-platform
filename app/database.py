@@ -40,7 +40,9 @@ def initialize_database() -> None:
             CREATE TABLE IF NOT EXISTS players (
                 player_id TEXT PRIMARY KEY,
                 nickname TEXT NOT NULL,
-                gem_balance INTEGER NOT NULL DEFAULT 0 CHECK (gem_balance >= 0)
+                gem_balance INTEGER NOT NULL DEFAULT 0 CHECK (gem_balance >= 0),
+                account_status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (account_status IN ('active', 'suspended'))
             );
 
             CREATE TABLE IF NOT EXISTS activities (
@@ -48,6 +50,8 @@ def initialize_database() -> None:
                 name TEXT NOT NULL,
                 reward_gems INTEGER NOT NULL CHECK (reward_gems > 0),
                 stock INTEGER NOT NULL CHECK (stock >= 0),
+                initial_stock INTEGER NOT NULL CHECK (initial_stock >= 0),
+                per_player_limit INTEGER NOT NULL DEFAULT 1 CHECK (per_player_limit > 0),
                 status TEXT NOT NULL CHECK (status IN ('active', 'inactive'))
             );
 
@@ -88,3 +92,18 @@ def initialize_database() -> None:
             );
             """
         )
+        _ensure_column(connection, "players", "account_status", "account_status TEXT NOT NULL DEFAULT 'active'")
+        _ensure_column(connection, "activities", "initial_stock", "initial_stock INTEGER")
+        _ensure_column(
+            connection,
+            "activities",
+            "per_player_limit",
+            "per_player_limit INTEGER NOT NULL DEFAULT 1",
+        )
+        connection.execute("UPDATE activities SET initial_stock = stock WHERE initial_stock IS NULL")
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")

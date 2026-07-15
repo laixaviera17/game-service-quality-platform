@@ -40,13 +40,15 @@ def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> Gran
             return GrantResult(**dict(prior), duplicated=True)
 
         player = connection.execute(
-            "SELECT player_id FROM players WHERE player_id = ?", (player_id,)
+            "SELECT player_id, account_status FROM players WHERE player_id = ?", (player_id,)
         ).fetchone()
         if not player:
             raise GrantNotFoundError("玩家不存在")
+        if player["account_status"] != "active":
+            raise GrantError("玩家账号不可领取活动奖励")
 
         activity = connection.execute(
-            """SELECT activity_id, reward_gems, stock, status FROM activities
+            """SELECT activity_id, reward_gems, stock, per_player_limit, status FROM activities
                WHERE activity_id = ?""",
             (activity_id,),
         ).fetchone()
@@ -54,6 +56,14 @@ def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> Gran
             raise GrantNotFoundError("活动不存在")
         if activity["status"] != "active":
             raise GrantError("活动未开启")
+
+        claim_count = connection.execute(
+            """SELECT COUNT(*) FROM reward_grants
+            WHERE player_id = ? AND activity_id = ? AND status = 'success'""",
+            (player_id, activity_id),
+        ).fetchone()[0]
+        if claim_count >= activity["per_player_limit"]:
+            raise GrantError("玩家领取次数已达活动上限")
         if activity["stock"] <= 0:
             raise GrantError("奖励库存不足")
 
@@ -83,7 +93,8 @@ def inventory(player_id: str) -> dict[str, object]:
     initialize_database()
     with connect() as connection:
         player = connection.execute(
-            "SELECT player_id, nickname, gem_balance FROM players WHERE player_id = ?",
+            """SELECT player_id, nickname, gem_balance, account_status
+            FROM players WHERE player_id = ?""",
             (player_id,),
         ).fetchone()
     if not player:

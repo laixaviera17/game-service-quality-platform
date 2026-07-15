@@ -28,6 +28,16 @@ RULE_METADATA = {
         "description": "玩家宝石余额为负数",
         "severity": "critical",
     },
+    "reward_amount_mismatch": {
+        "title": "奖励金额不一致",
+        "description": "成功发奖记录的奖励值与活动配置不一致",
+        "severity": "high",
+    },
+    "stock_mismatch": {
+        "title": "库存账实不一致",
+        "description": "活动当前库存与初始库存减成功发奖次数不一致",
+        "severity": "critical",
+    },
 }
 
 
@@ -100,6 +110,47 @@ def _evaluate(connection) -> list[dict[str, object]]:
                 connection,
                 """SELECT player_id, gem_balance FROM players
                 WHERE gem_balance < 0 ORDER BY gem_balance, player_id""",
+            ),
+        },
+        {
+            "rule": "reward_amount_mismatch",
+            "count": _count(
+                connection,
+                """SELECT COUNT(*) FROM reward_grants rg
+                JOIN activities a ON a.activity_id = rg.activity_id
+                WHERE rg.status = 'success' AND rg.reward_gems != a.reward_gems""",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT rg.grant_id, rg.activity_id, rg.reward_gems AS grant_reward,
+                a.reward_gems AS configured_reward
+                FROM reward_grants rg JOIN activities a ON a.activity_id = rg.activity_id
+                WHERE rg.status = 'success' AND rg.reward_gems != a.reward_gems
+                ORDER BY rg.grant_id""",
+            ),
+        },
+        {
+            "rule": "stock_mismatch",
+            "count": _count(
+                connection,
+                """SELECT COUNT(*) FROM (
+                    SELECT a.activity_id FROM activities a
+                    LEFT JOIN reward_grants rg
+                    ON rg.activity_id = a.activity_id AND rg.status = 'success'
+                    GROUP BY a.activity_id
+                    HAVING a.stock != a.initial_stock - COUNT(rg.grant_id)
+                )""",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT a.activity_id, a.initial_stock, a.stock,
+                COUNT(rg.grant_id) AS successful_grants,
+                a.initial_stock - COUNT(rg.grant_id) AS expected_stock
+                FROM activities a LEFT JOIN reward_grants rg
+                ON rg.activity_id = a.activity_id AND rg.status = 'success'
+                GROUP BY a.activity_id
+                HAVING a.stock != a.initial_stock - COUNT(rg.grant_id)
+                ORDER BY a.activity_id""",
             ),
         },
     ]
