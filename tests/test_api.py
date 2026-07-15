@@ -81,7 +81,7 @@ def test_health_quality_report_and_dashboard_are_available():
     assert report.status_code == 200
     assert report.json()["summary"]["rules"] == 6
     assert dashboard.status_code == 200
-    assert "Game QA Console" in dashboard.text
+    assert "Reward Reliability Lab" in dashboard.text
 
 
 def test_quality_run_api_persists_and_reads_a_snapshot():

@@ -10,8 +10,15 @@ from pydantic import BaseModel, Field
 from .database import initialize_database
 from .demo_faults import clear_faults, fault_catalog, inject_fault
 from .quality import get_quality_run, list_quality_runs, run_quality_check
+from .reliability import (
+    available_reliability_scenarios,
+    create_reliability_run,
+    get_reliability_run,
+    list_reliability_runs,
+    reliability_trend,
+)
 from .service import GrantError, GrantNotFoundError, grant_reward, inventory, serialize
-from .task_queue import dispatch_test_run
+from .task_queue import dispatch_reliability_run, dispatch_test_run
 from .test_runner import (
     available_scenarios,
     create_test_run,
@@ -47,6 +54,10 @@ class TestRunRequest(BaseModel):
 
 class FaultRequest(BaseModel):
     fault_type: str
+
+
+class ReliabilityRunRequest(BaseModel):
+    scenario: str
 
 
 @app.get("/health")
@@ -175,6 +186,42 @@ def create_demo_fault(body: FaultRequest):
 @app.delete("/demo/faults")
 def delete_demo_faults():
     return {"deleted_grants": clear_faults()}
+
+
+@app.get("/reliability/scenarios")
+def reliability_scenarios():
+    return {"items": available_reliability_scenarios()}
+
+
+@app.post("/reliability/runs", status_code=201)
+def create_reliability_experiment(body: ReliabilityRunRequest):
+    try:
+        run_id = create_reliability_run(body.scenario)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    dispatch_status = dispatch_reliability_run(run_id)
+    report = get_reliability_run(run_id)
+    if dispatch_status == "queued":
+        return {"run_id": run_id, "status": "queued", "message": "实验已提交至 Redis/Celery Worker"}
+    return report
+
+
+@app.get("/reliability/runs")
+def reliability_runs(limit: int = 12):
+    return {"items": list_reliability_runs(limit=max(1, min(limit, 50)))}
+
+
+@app.get("/reliability/trend")
+def get_reliability_trend(limit: int = 12):
+    return reliability_trend(limit=max(1, min(limit, 50)))
+
+
+@app.get("/reliability/runs/{run_id}")
+def reliability_run_detail(run_id: int):
+    report = get_reliability_run(run_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="可靠性实验不存在")
+    return report
 
 
 @app.get("/dashboard")

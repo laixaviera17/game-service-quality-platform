@@ -1,6 +1,8 @@
 # Game Service Quality Platform
 
-面向游戏活动奖励发放场景的服务测试与数据质量平台。它用一个可运行的「活动奖励发放服务」模拟游戏后端，并提供：
+面向游戏活动奖励发放场景的服务测试与数据质量平台。项目的核心是一个可运行的「奖励发放可靠性实验」：在重复请求、确认丢失后重试、并发重复消费三类场景中，验证一次奖励最终只产生一笔账本流水和一次余额变更。
+
+它用一个可运行的活动奖励服务模拟后端，并提供：
 
 - 奖励发放接口及幂等控制；
 - SQLite / MySQL 可切换的事务与奖励库存更新；
@@ -9,14 +11,35 @@
 - 质量检查运行快照、测试运行历史与本地可视化控制台；
 - Docker Compose 启动 MySQL、Redis、API 与 Celery Worker，异步执行服务测试任务。
 
+## 核心：奖励发放可靠性实验
+
+`/dashboard` 的主流程不是静态看板，而是一条可执行的可靠性验证链路：
+
+```text
+奖励请求（幂等键）
+  → MySQL 事务：创建 delivery_order + Outbox event
+  → Redis / Celery Worker 消费事件
+  → 写入以 order_id 为唯一键的钱包账本
+  → 更新玩家余额、完成 Outbox
+  → 校验订单数、事件数、账本数、余额和最终状态
+```
+
+账本表对 `order_id` 设置唯一约束，且消费者先写账本再更新余额。因此即使 Worker 再次收到同一事件，也会命中已有账本并跳过余额变更。实验会保存完整事件时间线、每一步的载荷与最终断言。
+
+可选择的场景：
+
+- **重复请求**：相同幂等键连续提交两次，验证订单和 Outbox 不重复创建；
+- **确认丢失后重试**：首次消费已完成入账但未确认，重试后验证余额不重复增加；
+- **并发重复消费**：两个消费者处理同一事件，验证唯一账本只允许一个副作用提交。
+
 ## 项目能力映射
 
 | 能力维度 | 项目对应实现 |
 | --- | --- |
-| 测试工具 / 平台前后端开发 | FastAPI 服务、质量检查与服务测试运行接口、运行快照与本地控制台 |
-| 自动化测试 | `pytest` 覆盖 API、质量规则与服务场景；平台运行后会保存每个场景的请求、响应、断言和耗时 |
-| HTTP / MySQL / Redis | REST API、状态码、请求幂等键；`DATABASE_URL` 选择 SQLite 或 MySQL；Docker 环境通过 Redis/Celery 投递测试运行 |
-| 事务与并发 | SQLite `BEGIN IMMEDIATE` / MySQL 行锁与条件更新，覆盖库存扣减和并发不超卖场景 |
+| 测试工具 / 平台前后端开发 | FastAPI 服务、可靠性实验运行接口、事件时间线与本地控制台 |
+| 自动化测试 | `pytest` 覆盖 API、质量规则、服务场景和奖励可靠性实验；实验持久化订单、事件、账本和最终断言 |
+| HTTP / MySQL / Redis | REST API、状态码、请求幂等键；`DATABASE_URL` 选择 SQLite 或 MySQL；Docker 环境通过 Redis/Celery 投递实验任务 |
+| 事务与并发 | 订单与 Outbox 同一事务写入；账本 `order_id` 唯一约束隔离重复消费副作用；覆盖 MySQL 并发消费与库存扣减 |
 | 质量检查与报告 | 六条质量规则输出结构化结果与最多 3 条异常样本；每次执行可保存快照并回看历史结果 |
 
 ## 运行
@@ -50,11 +73,12 @@ python3 -m uvicorn app.main:app --reload
 docker compose up --build
 ```
 
-启动后访问 `http://127.0.0.1:8000/dashboard`。此环境使用 MySQL 持久化业务数据、质量快照和测试结果；点击“执行服务测试”会先创建 `queued` 运行记录，再由 Celery Worker 从 Redis 队列消费。可在终端查看：
+启动后访问 `http://127.0.0.1:8000/dashboard`。此环境使用 MySQL 持久化订单、Outbox、账本、实验事件和测试结果；点击“运行可靠性实验”会先创建 `queued` 运行记录，再由 Celery Worker 从 Redis 队列消费。页面会展示最终不变量与每个持久化事件。可在终端查看：
 
 ```bash
 docker compose logs -f worker
 curl -X POST http://127.0.0.1:8000/test-runs
+curl -X POST http://127.0.0.1:8000/reliability/runs -H 'Content-Type: application/json' -d '{"scenario":"acknowledgement_loss"}'
 ```
 
 开发密码只用于本地 Compose 示例；部署到其他环境时应通过环境变量替换。
@@ -86,4 +110,4 @@ python3 -m scripts.run_quality_check
 
 - 基于 Python、FastAPI 与 SQLAlchemy 搭建活动奖励发放服务，支持 SQLite / MySQL 配置切换；设计幂等键、事务扣减和库存校验，覆盖重复请求、领取上限与库存不足等场景。
 - 实现服务测试运行器，隔离构造测试数据，执行正常发奖、幂等重试、账号状态和并发库存等 5 类场景，持久化每条场景的请求、响应、断言和耗时。
-- 使用 Docker Compose 编排 MySQL、Redis、API 与 Celery Worker；在容器环境将测试运行异步投递到 Redis 队列，并保留质量规则和异常样本定位结果。
+- 使用 Docker Compose 编排 MySQL、Redis、API 与 Celery Worker；实现订单与 Outbox 同事务写入、`order_id` 唯一账本去重，并通过重复请求、确认丢失重试和并发消费实验验证奖励只产生一次余额副作用。

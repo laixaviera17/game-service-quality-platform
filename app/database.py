@@ -121,6 +121,60 @@ test_case_results = Table(
     Column("assertion_json", Text, nullable=False),
     Column("error_message", Text),
 )
+reliability_runs = Table(
+    "reliability_runs",
+    metadata,
+    Column("run_id", Integer, primary_key=True, autoincrement=True),
+    Column("scenario", String(64), nullable=False),
+    Column("trigger", String(32), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("started_at", String(40), nullable=False),
+    Column("completed_at", String(40)),
+    Column("passed", Integer),
+    Column("summary_json", Text),
+    Column("error_message", Text),
+)
+delivery_orders = Table(
+    "delivery_orders",
+    metadata,
+    Column("order_id", String(80), primary_key=True),
+    Column("run_id", Integer, ForeignKey("reliability_runs.run_id"), nullable=False),
+    Column("player_id", String(64), ForeignKey("players.player_id"), nullable=False),
+    Column("idempotency_key", String(128), nullable=False, unique=True),
+    Column("reward_gems", Integer, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("delivered_at", String(40)),
+)
+delivery_outbox_events = Table(
+    "delivery_outbox_events",
+    metadata,
+    Column("event_id", Integer, primary_key=True, autoincrement=True),
+    Column("order_id", String(80), ForeignKey("delivery_orders.order_id"), nullable=False, unique=True),
+    Column("status", String(16), nullable=False),
+    Column("attempt_count", Integer, nullable=False, server_default="0"),
+    Column("created_at", String(40), nullable=False),
+    Column("consumed_at", String(40)),
+)
+delivery_wallet_ledger = Table(
+    "delivery_wallet_ledger",
+    metadata,
+    Column("entry_id", Integer, primary_key=True, autoincrement=True),
+    Column("order_id", String(80), ForeignKey("delivery_orders.order_id"), nullable=False, unique=True),
+    Column("player_id", String(64), ForeignKey("players.player_id"), nullable=False),
+    Column("reward_gems", Integer, nullable=False),
+    Column("created_at", String(40), nullable=False),
+)
+reliability_events = Table(
+    "reliability_events",
+    metadata,
+    Column("event_id", Integer, primary_key=True, autoincrement=True),
+    Column("run_id", Integer, ForeignKey("reliability_runs.run_id"), nullable=False),
+    Column("kind", String(32), nullable=False),
+    Column("message", String(255), nullable=False),
+    Column("payload_json", Text, nullable=False),
+    Column("created_at", String(40), nullable=False),
+)
 
 _engine: Engine | None = None
 _engine_url: str | None = None

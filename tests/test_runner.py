@@ -12,6 +12,7 @@ from app.task_queue import celery_app
 def test_celery_worker_registers_service_test_task():
     celery_app.loader.import_default_modules()
     assert "app.tasks.execute_service_test_run" in celery_app.tasks
+    assert "app.tasks.execute_reliability_run" in celery_app.tasks
 
 
 def test_service_test_run_persists_five_isolated_scenarios():

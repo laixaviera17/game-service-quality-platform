@@ -30,3 +30,13 @@ def dispatch_test_run(run_id: int) -> str:
     from .test_runner import execute_test_run
     execute_test_run(run_id)
     return "completed"
+
+
+def dispatch_reliability_run(run_id: int) -> str:
+    """Run reliability experiments locally or through the same Redis/Celery path."""
+    if uses_async_worker():
+        celery_app.send_task("app.tasks.execute_reliability_run", args=[run_id])
+        return "queued"
+    from .reliability import execute_reliability_run
+    execute_reliability_run(run_id)
+    return "completed"
