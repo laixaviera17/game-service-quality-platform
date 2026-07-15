@@ -139,7 +139,7 @@ def _evaluate(connection) -> list[dict[str, object]]:
                     SELECT a.activity_id FROM activities a
                     LEFT JOIN reward_grants rg
                     ON rg.activity_id = a.activity_id AND rg.status = 'success'
-                    GROUP BY a.activity_id
+                    GROUP BY a.activity_id, a.stock, a.initial_stock
                     HAVING a.stock != a.initial_stock - COUNT(rg.grant_id)
                 ) AS stock_differences""",
             ),
@@ -150,7 +150,7 @@ def _evaluate(connection) -> list[dict[str, object]]:
                 a.initial_stock - COUNT(rg.grant_id) AS expected_stock
                 FROM activities a LEFT JOIN reward_grants rg
                 ON rg.activity_id = a.activity_id AND rg.status = 'success'
-                GROUP BY a.activity_id
+                GROUP BY a.activity_id, a.stock, a.initial_stock
                 HAVING a.stock != a.initial_stock - COUNT(rg.grant_id)
                 ORDER BY a.activity_id""",
             ),
