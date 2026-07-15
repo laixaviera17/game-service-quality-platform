@@ -61,7 +61,7 @@ def _evaluate(connection) -> list[dict[str, object]]:
                     SELECT player_id, activity_id FROM reward_grants
                     WHERE status = 'success'
                     GROUP BY player_id, activity_id HAVING COUNT(*) > 1
-                )""",
+                ) AS duplicate_groups""",
             ),
             "samples": _samples(
                 connection,
@@ -141,7 +141,7 @@ def _evaluate(connection) -> list[dict[str, object]]:
                     ON rg.activity_id = a.activity_id AND rg.status = 'success'
                     GROUP BY a.activity_id
                     HAVING a.stock != a.initial_stock - COUNT(rg.grant_id)
-                )""",
+                ) AS stock_differences""",
             ),
             "samples": _samples(
                 connection,
