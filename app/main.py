@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from .database import initialize_database
 from .quality import get_quality_run, list_quality_runs, run_quality_check
 from .service import GrantError, GrantNotFoundError, grant_reward, inventory, serialize
+from .task_queue import dispatch_test_run
+from .test_runner import create_test_run, get_test_run, list_test_runs
 
 
 @asynccontextmanager
@@ -19,7 +21,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title="Game Service Quality Platform", version="0.1.0", lifespan=lifespan
+    title="Game Service Quality Platform", version="0.2.0", lifespan=lifespan
 )
 DASHBOARD = Path(__file__).resolve().parents[1] / "dashboard.html"
 
@@ -80,6 +82,31 @@ def quality_run_detail(run_id: int):
     report = get_quality_run(run_id)
     if not report:
         raise HTTPException(status_code=404, detail="质量检查记录不存在")
+    return report
+
+
+@app.post("/test-runs", status_code=201)
+def create_service_test_run():
+    run_id = create_test_run(trigger="api")
+    dispatch_status = dispatch_test_run(run_id)
+    report = get_test_run(run_id)
+    if not report:
+        raise HTTPException(status_code=500, detail="测试运行创建失败")
+    if dispatch_status == "queued":
+        return {"run_id": run_id, "status": "queued", "message": "任务已提交至 Redis/Celery Worker"}
+    return report
+
+
+@app.get("/test-runs")
+def service_test_runs(limit: int = 12):
+    return {"items": list_test_runs(limit=max(1, min(limit, 50)))}
+
+
+@app.get("/test-runs/{run_id}")
+def service_test_run_detail(run_id: int):
+    report = get_test_run(run_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="测试运行不存在")
     return report
 
 

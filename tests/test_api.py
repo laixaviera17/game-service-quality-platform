@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.database import connect
 from app.main import app
@@ -6,12 +7,12 @@ from app.main import app
 
 def seed() -> None:
     with connect() as connection:
-        connection.execute("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)")
-        connection.execute(
+        connection.execute(text("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)"))
+        connection.execute(text(
             """INSERT INTO activities
                (activity_id, name, reward_gems, stock, initial_stock, status)
                VALUES ('a1', 'Login', 100, 2, 2, 'active')"""
-        )
+        ))
 
 
 def test_grant_api_is_idempotent():
@@ -104,6 +105,21 @@ def test_quality_run_api_returns_404_for_missing_run():
     response = TestClient(app).get("/quality/runs/999")
     assert response.status_code == 404
     assert response.json() == {"detail": "质量检查记录不存在"}
+
+
+def test_service_test_run_api_executes_and_persists_case_evidence():
+    client = TestClient(app)
+    created = client.post("/test-runs")
+
+    assert created.status_code == 201
+    assert created.json()["status"] == "passed"
+    assert created.json()["summary"] == {"total_cases": 5, "passed_cases": 5, "failed_cases": 0}
+    run_id = created.json()["run_id"]
+    detail = client.get(f"/test-runs/{run_id}")
+    history = client.get("/test-runs?limit=1")
+    assert detail.json()["cases"][0]["request"]
+    assert detail.json()["cases"][0]["assertions"]
+    assert history.json()["items"][0]["run_id"] == run_id
 
 
 def test_api_validates_blank_player_and_missing_inventory():

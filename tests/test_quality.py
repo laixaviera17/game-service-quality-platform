@@ -1,20 +1,21 @@
 from app.database import connect
 from app.quality import run_quality_check
+from sqlalchemy import text
 
 
 def test_quality_check_reports_duplicate_reward():
     with connect() as connection:
-        connection.execute("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)")
-        connection.execute(
+        connection.execute(text("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)"))
+        connection.execute(text(
             """INSERT INTO activities
                (activity_id, name, reward_gems, stock, initial_stock, status)
                VALUES ('a1', 'Login', 100, 3, 5, 'active')"""
-        )
-        connection.executemany(
+        ))
+        connection.execute(text(
             """INSERT INTO reward_grants
                (player_id, activity_id, idempotency_key, reward_gems, status)
-               VALUES ('p1', 'a1', ?, 100, 'success')""",
-            [("key-1",), ("key-2",)],
+               VALUES ('p1', 'a1', :idempotency_key, 100, 'success')"""),
+            [{"idempotency_key": "key-1"}, {"idempotency_key": "key-2"}],
         )
 
     report = run_quality_check()
@@ -28,19 +29,19 @@ def test_quality_check_reports_duplicate_reward():
 
 def test_quality_check_returns_diagnostic_samples_for_invalid_data():
     with connect() as connection:
-        connection.execute("PRAGMA foreign_keys = OFF")
-        connection.execute("PRAGMA ignore_check_constraints = TRUE")
-        connection.execute("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', -1)")
-        connection.execute(
+        connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+        connection.exec_driver_sql("PRAGMA ignore_check_constraints = TRUE")
+        connection.execute(text("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', -1)"))
+        connection.execute(text(
             """INSERT INTO activities
                (activity_id, name, reward_gems, stock, initial_stock, status)
                VALUES ('a1', 'Login', 100, 5, 5, 'archived')"""
-        )
-        connection.execute(
+        ))
+        connection.execute(text(
             """INSERT INTO reward_grants
                (player_id, activity_id, idempotency_key, reward_gems, status)
                VALUES ('missing-player', 'missing-activity', 'orphan-key', 100, 'success')"""
-        )
+        ))
 
     report = run_quality_check()
     findings = {item["rule"]: item for item in report["findings"]}
@@ -58,17 +59,17 @@ def test_quality_check_returns_diagnostic_samples_for_invalid_data():
 
 def test_quality_check_reports_reward_and_stock_mismatches():
     with connect() as connection:
-        connection.execute("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)")
-        connection.execute(
+        connection.execute(text("INSERT INTO players(player_id, nickname, gem_balance) VALUES ('p1', 'Tester', 0)"))
+        connection.execute(text(
             """INSERT INTO activities
                (activity_id, name, reward_gems, stock, initial_stock, status)
                VALUES ('a1', 'Login', 100, 8, 10, 'active')"""
-        )
-        connection.execute(
+        ))
+        connection.execute(text(
             """INSERT INTO reward_grants
                (player_id, activity_id, idempotency_key, reward_gems, status)
                VALUES ('p1', 'a1', 'bad-reward', 50, 'success')"""
-        )
+        ))
 
     findings = {item["rule"]: item for item in run_quality_check()["findings"]}
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from sqlalchemy import text
+
 from .database import connect, initialize_database
 
 
@@ -42,11 +44,11 @@ RULE_METADATA = {
 
 
 def _count(connection, statement: str) -> int:
-    return int(connection.execute(statement).fetchone()[0])
+    return int(connection.execute(text(statement)).scalar_one())
 
 
 def _samples(connection, statement: str) -> list[dict[str, object]]:
-    return [dict(row) for row in connection.execute(statement).fetchmany(SAMPLE_LIMIT)]
+    return [dict(row) for row in connection.execute(text(statement)).mappings().fetchmany(SAMPLE_LIMIT)]
 
 
 def _evaluate(connection) -> list[dict[str, object]]:
@@ -172,35 +174,28 @@ def _summary(findings: list[dict[str, object]]) -> dict[str, int]:
 def _save_run(connection, report: dict[str, object]) -> int:
     summary = report["summary"]
     cursor = connection.execute(
-        """INSERT INTO quality_runs
+        text("""INSERT INTO quality_runs
            (trigger, started_at, completed_at, status, rules, failed_rules, total_findings)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (
-            report["trigger"],
-            report["generated_at"],
-            report["generated_at"],
-            report["status"],
-            summary["rules"],
-            summary["failed_rules"],
-            summary["total_findings"],
-        ),
+           VALUES (:trigger, :started_at, :completed_at, :status, :rules, :failed_rules, :total_findings)"""),
+        {
+            "trigger": report["trigger"], "started_at": report["generated_at"],
+            "completed_at": report["generated_at"], "status": report["status"],
+            "rules": summary["rules"], "failed_rules": summary["failed_rules"],
+            "total_findings": summary["total_findings"],
+        },
     )
     run_id = int(cursor.lastrowid)
     for finding in report["findings"]:
         connection.execute(
-            """INSERT INTO quality_run_findings
+            text("""INSERT INTO quality_run_findings
                (run_id, rule, title, description, severity, finding_count, passed, samples_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                run_id,
-                finding["rule"],
-                finding["title"],
-                finding["description"],
-                finding["severity"],
-                finding["count"],
-                int(finding["passed"]),
-                json.dumps(finding["samples"], ensure_ascii=False),
-            ),
+               VALUES (:run_id, :rule, :title, :description, :severity, :finding_count, :passed, :samples_json)"""),
+            {
+                "run_id": run_id, "rule": finding["rule"], "title": finding["title"],
+                "description": finding["description"], "severity": finding["severity"],
+                "finding_count": finding["count"], "passed": int(finding["passed"]),
+                "samples_json": json.dumps(finding["samples"], ensure_ascii=False),
+            },
         )
     return run_id
 
@@ -228,16 +223,14 @@ def run_quality_check(*, persist: bool = False, trigger: str = "script") -> dict
 def get_quality_run(run_id: int) -> dict[str, object] | None:
     initialize_database()
     with connect() as connection:
-        run = connection.execute(
-            "SELECT * FROM quality_runs WHERE run_id = ?", (run_id,)
-        ).fetchone()
+        run = connection.execute(text("SELECT * FROM quality_runs WHERE run_id = :run_id"), {"run_id": run_id}).mappings().first()
         if not run:
             return None
         finding_rows = connection.execute(
-            """SELECT rule, title, description, severity, finding_count, passed, samples_json
-            FROM quality_run_findings WHERE run_id = ? ORDER BY rowid""",
-            (run_id,),
-        ).fetchall()
+            text("""SELECT rule, title, description, severity, finding_count, passed, samples_json
+            FROM quality_run_findings WHERE run_id = :run_id ORDER BY rule"""),
+            {"run_id": run_id},
+        ).mappings().all()
     return {
         "run_id": run["run_id"],
         "trigger": run["trigger"],
@@ -267,10 +260,10 @@ def list_quality_runs(limit: int = 12) -> list[dict[str, object]]:
     initialize_database()
     with connect() as connection:
         rows = connection.execute(
-            """SELECT run_id, trigger, completed_at, status, rules, failed_rules, total_findings
-            FROM quality_runs ORDER BY run_id DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
+            text("""SELECT run_id, trigger, completed_at, status, rules, failed_rules, total_findings
+            FROM quality_runs ORDER BY run_id DESC LIMIT :limit"""),
+            {"limit": limit},
+        ).mappings().all()
     return [
         {
             "run_id": row["run_id"],
