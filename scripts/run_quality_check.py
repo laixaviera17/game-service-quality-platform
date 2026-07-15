@@ -5,7 +5,7 @@ from app.quality import run_quality_check
 
 
 def main() -> None:
-    report = run_quality_check()
+    report = run_quality_check(persist=True, trigger="script")
     output = Path(__file__).resolve().parents[1] / "reports" / "latest.json"
     output.parent.mkdir(exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -3,56 +3,183 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>游戏服务质量看板</title>
+    <title>Game QA Console</title>
     <style>
-      body { background: #101728; color: #ecf2ff; font: 16px/1.5 system-ui; margin: 0; }
-      main { max-width: 920px; margin: 48px auto; padding: 0 24px; }
-      h1 { margin-bottom: 4px; } .muted { color: #9babc8; }
-      #summary { display: flex; gap: 12px; margin: 28px 0; flex-wrap: wrap; }
-      .metric, .rule { border: 1px solid #263758; border-radius: 12px; background: #18233a; padding: 18px; }
-      .metric { min-width: 150px; } .metric strong { display: block; font-size: 28px; }
-      .rule { margin: 10px 0; display: flex; justify-content: space-between; gap: 16px; }
-      .rule-detail { min-width: 0; } .badge { border-radius: 999px; font-size: 12px; padding: 2px 8px; text-transform: uppercase; }
-      .critical { background: #5b2335; color: #ffb3bd; } .high { background: #5d3c25; color: #ffd0a1; } .medium { background: #594e28; color: #ffe59a; }
-      pre { overflow: auto; margin: 10px 0 0; color: #cbd8ef; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
-      #updated-at { margin-top: -18px; } #error { color: #ff9eaa; }
-      .passed { color: #53d7a3; } .failed { color: #ff8c98; }
+      :root {
+        --bg: #090f1f;
+        --panel: #111a2f;
+        --panel-2: #151f36;
+        --line: #243452;
+        --line-soft: rgba(129, 156, 205, .15);
+        --text: #edf3ff;
+        --muted: #91a2c5;
+        --blue: #5a9bff;
+        --cyan: #5ee1ff;
+        --green: #55d6a6;
+        --amber: #f8b866;
+        --red: #ff7792;
+        --critical: #d85d76;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; color: var(--text); background: radial-gradient(circle at 85% 0%, #172b59 0, transparent 27rem), var(--bg); }
+      button { font: inherit; cursor: pointer; }
+      .app { max-width: 1440px; margin: 0 auto; padding: 28px 32px 44px; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 26px; border-bottom: 1px solid var(--line-soft); }
+      .brand { display: flex; gap: 13px; align-items: center; }
+      .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; color: #071326; background: linear-gradient(135deg, var(--cyan), var(--blue)); border-radius: 12px; font-size: 20px; font-weight: 900; box-shadow: 0 10px 30px rgba(74, 143, 255, .22); }
+      .eyebrow { margin: 0 0 3px; color: var(--cyan); font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .13em; }
+      h1 { margin: 0; font-size: clamp(22px, 3vw, 30px); letter-spacing: -.03em; }
+      .top-meta { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 13px; }
+      .connection { display: flex; align-items: center; gap: 7px; }
+      .connection::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(85, 214, 166, .12); }
+      .run-button { border: 0; border-radius: 9px; padding: 11px 16px; color: #071326; font-weight: 800; background: linear-gradient(135deg, var(--cyan), #83aaff); box-shadow: 0 8px 24px rgba(88, 163, 255, .26); }
+      .run-button:disabled { cursor: wait; opacity: .65; }
+      .headline { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin: 32px 0 21px; }
+      .headline h2 { margin: 0; font-size: 19px; }
+      .headline p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+      .run-label { text-align: right; color: var(--muted); font-size: 12px; }
+      .run-label strong { display: block; margin-top: 4px; color: var(--text); font-size: 13px; font-weight: 650; }
+      .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+      .metric { min-height: 126px; overflow: hidden; position: relative; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(26, 41, 72, .96), rgba(16, 25, 46, .96)); }
+      .metric::after { content: ""; position: absolute; width: 90px; height: 90px; right: -30px; top: -35px; border-radius: 50%; background: radial-gradient(circle, rgba(104, 171, 255, .22), transparent 68%); }
+      .metric-label { color: var(--muted); font-size: 13px; } .metric-value { margin-top: 11px; font-size: 34px; font-weight: 760; letter-spacing: -.04em; } .metric-sub { margin-top: 5px; color: var(--muted); font-size: 12px; }
+      .metric.danger .metric-value { color: var(--red); } .metric.success .metric-value { color: var(--green); }
+      .content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(290px, .75fr); gap: 16px; margin-top: 16px; }
+      .panel { border: 1px solid var(--line); border-radius: 14px; background: rgba(15, 24, 45, .92); box-shadow: 0 16px 50px rgba(0, 0, 0, .12); }
+      .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 17px 19px; border-bottom: 1px solid var(--line-soft); }
+      .panel-title { margin: 0; font-size: 15px; } .panel-note { color: var(--muted); font-size: 12px; }
+      .filters { display: flex; flex-wrap: wrap; gap: 7px; }
+      .filter { padding: 6px 9px; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; background: transparent; font-size: 12px; }
+      .filter.active { border-color: rgba(94, 225, 255, .55); color: var(--cyan); background: rgba(67, 165, 226, .11); }
+      .rules { padding: 6px 12px 12px; }
+      .rule { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 15px 7px; border-bottom: 1px solid var(--line-soft); }
+      .rule:last-child { border-bottom: 0; } .rule-stripe { width: 4px; height: 42px; border-radius: 5px; background: var(--green); } .rule.failed .rule-stripe { background: var(--amber); } .rule.critical .rule-stripe { background: var(--critical); }
+      .rule-name { display: flex; align-items: center; gap: 8px; min-width: 0; } .rule-name strong { font-size: 14px; } .rule-code { overflow: hidden; color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+      .rule-description { margin-top: 4px; color: var(--muted); font-size: 12px; }
+      .severity { border-radius: 999px; padding: 3px 7px; font: 700 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; } .severity.high { color: #ffd19b; background: rgba(248, 184, 102, .17); } .severity.medium { color: #f7df8d; background: rgba(215, 190, 77, .16); } .severity.critical { color: #ffb3c2; background: rgba(216, 93, 118, .19); }
+      .rule-result { min-width: 92px; text-align: right; } .result-status { font-size: 13px; font-weight: 750; color: var(--green); } .rule.failed .result-status { color: var(--red); } .samples-button { display: inline-flex; margin-top: 6px; padding: 0; color: var(--cyan); border: 0; background: transparent; font-size: 12px; }
+      .side { display: grid; gap: 16px; align-content: start; }
+      .severity-body { padding: 17px 19px 19px; } .severity-row { display: grid; grid-template-columns: 68px 1fr 20px; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--muted); font-size: 12px; } .severity-row:last-child { margin-bottom: 0; }
+      .bar { height: 8px; overflow: hidden; border-radius: 99px; background: #22304c; } .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--amber); } .bar.critical > span { background: var(--critical); } .bar.medium > span { background: #d9c15d; }
+      .run-context { padding: 17px 19px; display: grid; gap: 13px; } .context-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; } .context-row span { color: var(--muted); } .context-row strong { font-weight: 650; text-align: right; }
+      .history { margin-top: 16px; overflow: hidden; } .history-list { padding: 0 19px 7px; } .history-row { display: grid; grid-template-columns: 82px 1fr 90px 76px 28px; align-items: center; gap: 11px; padding: 13px 0; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 12px; } .history-row:last-child { border-bottom: 0; } .history-run { color: var(--text); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; } .history-status { font-weight: 700; color: var(--green); } .history-status.failed { color: var(--red); } .history-open { width: 26px; height: 26px; color: var(--cyan); border: 1px solid var(--line); border-radius: 6px; background: transparent; }
+      .empty { padding: 38px 20px; color: var(--muted); text-align: center; font-size: 13px; }
+      .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; max-width: 330px; padding: 12px 14px; transform: translateY(20px); opacity: 0; pointer-events: none; color: #ffd3da; border: 1px solid rgba(255, 119, 146, .35); border-radius: 9px; background: #3a1c2a; font-size: 13px; transition: .2s ease; } .toast.show { transform: translateY(0); opacity: 1; }
+      .drawer { position: fixed; inset: 0; z-index: 30; display: grid; justify-items: end; visibility: hidden; background: rgba(4, 8, 19, 0); transition: .2s ease; } .drawer.open { visibility: visible; background: rgba(4, 8, 19, .62); } .drawer-panel { width: min(500px, 100%); height: 100%; padding: 26px; overflow: auto; transform: translateX(100%); border-left: 1px solid var(--line); background: #0e172b; transition: .25s ease; } .drawer.open .drawer-panel { transform: translateX(0); }
+      .drawer-top { display: flex; justify-content: space-between; gap: 15px; align-items: start; } .drawer-title { margin: 0; font-size: 20px; } .drawer-subtitle { margin: 6px 0 0; color: var(--muted); font-size: 13px; } .close { width: 30px; height: 30px; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; background: transparent; }
+      .sample-card { margin-top: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); } .sample-card h4 { margin: 0 0 12px; color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; } .sample-row { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; } .sample-row:last-child { border-bottom: 0; } .sample-row span { color: var(--muted); } .sample-row strong { overflow-wrap: anywhere; text-align: right; font-weight: 650; }
+      @media (max-width: 900px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } .content-grid { grid-template-columns: 1fr; } .top-meta .connection { display: none; } }
+      @media (max-width: 620px) { .app { padding: 18px 15px 32px; } .topbar { align-items: start; } .top-meta { flex-direction: column; align-items: end; gap: 9px; } .headline { align-items: start; flex-direction: column; } .run-label { text-align: left; } .metric-grid { gap: 9px; } .metric { min-height: 108px; padding: 14px; } .history-row { grid-template-columns: 58px 1fr 58px 28px; } .history-row .history-time { display: none; } .rule { grid-template-columns: 6px minmax(0, 1fr); } .rule-result { grid-column: 2; text-align: left; } }
     </style>
   </head>
   <body>
-    <main>
-      <h1>游戏服务质量看板</h1>
-      <p class="muted">活动奖励发放 · 数据质量规则执行结果</p>
-      <section id="summary"></section>
-      <p id="updated-at" class="muted"></p>
-      <section id="rules"></section>
-      <p id="error" role="alert"></p>
-    </main>
-    <script>
-      const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
-      const renderSamples = samples => samples.length
-        ? `<pre>${escapeHtml(JSON.stringify(samples, null, 2))}</pre>`
-        : '';
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">Q</div>
+          <div><p class="eyebrow">LOCAL QUALITY PLATFORM</p><h1>Game QA Console</h1></div>
+        </div>
+        <div class="top-meta"><span class="connection">本地 API 已连接</span><button id="run-button" class="run-button">运行质量检查</button></div>
+      </header>
 
-      fetch('/quality/check')
-        .then(response => {
-          if (!response.ok) throw new Error(`请求失败（${response.status}）`);
-          return response.json();
-        })
-        .then(report => {
-          document.querySelector('#summary').innerHTML = [
-            ['规则数', report.summary.rules], ['失败规则', report.summary.failed_rules], ['问题总数', report.summary.total_findings]
-          ].map(([name, value]) => `<div class="metric"><span>${name}</span><strong>${value}</strong></div>`).join('');
-          document.querySelector('#updated-at').textContent = `检查时间：${new Date(report.generated_at).toLocaleString()}`;
-          document.querySelector('#rules').innerHTML = report.findings.map(item => `
-            <article class="rule"><div class="rule-detail"><strong>${escapeHtml(item.rule)}</strong>
-              <span class="badge ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><br>
-              <span class="muted">${escapeHtml(item.description)}</span>${renderSamples(item.samples)}</div>
-              <div class="${item.passed ? 'passed' : 'failed'}">${item.passed ? '通过' : `发现 ${item.count} 项`}</div></article>`).join('');
-        })
-        .catch(error => {
-          document.querySelector('#error').textContent = `无法加载质量报告：${error.message}`;
-        });
+      <section class="headline">
+        <div><h2>质量总览</h2><p>奖励发放数据检查 · 本地构造演示数据</p></div>
+        <div id="run-label" class="run-label">正在读取最近执行记录…</div>
+      </section>
+      <section id="metrics" class="metric-grid" aria-label="质量指标"></section>
+
+      <section class="content-grid">
+        <article class="panel">
+          <div class="panel-head"><div><h3 class="panel-title">规则执行结果</h3><span id="rules-note" class="panel-note">—</span></div><div id="filters" class="filters"></div></div>
+          <div id="rules" class="rules"></div>
+        </article>
+        <aside class="side">
+          <article class="panel"><div class="panel-head"><h3 class="panel-title">风险分布</h3><span class="panel-note">按失败规则</span></div><div id="severity" class="severity-body"></div></article>
+          <article class="panel"><div class="panel-head"><h3 class="panel-title">本次执行</h3><span id="run-status" class="panel-note">—</span></div><div id="context" class="run-context"></div></article>
+        </aside>
+      </section>
+
+      <section class="panel history">
+        <div class="panel-head"><div><h3 class="panel-title">最近执行记录</h3><span class="panel-note">点击箭头查看历史快照</span></div><span id="history-count" class="panel-note"></span></div>
+        <div id="history" class="history-list"></div>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="alert"></div>
+    <div id="drawer" class="drawer" aria-hidden="true"><section class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title"><div class="drawer-top"><div><h2 id="drawer-title" class="drawer-title">异常样本</h2><p id="drawer-subtitle" class="drawer-subtitle"></p></div><button id="drawer-close" class="close" aria-label="关闭">×</button></div><div id="drawer-content"></div></section></div>
+    <script>
+      const state = { report: null, history: [], filter: 'all' };
+      const labels = { all: '全部', critical: '严重', high: '高', medium: '中', passed: '通过' };
+      const keyLabels = { player_id: '玩家 ID', activity_id: '活动 ID', grant_id: '发奖记录 ID', grant_count: '成功发奖次数', status: '状态', gem_balance: '宝石余额' };
+      const $ = selector => document.querySelector(selector);
+      const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
+      const formatDate = value => new Intl.DateTimeFormat('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value));
+      const statusText = status => status === 'passed' ? '全部通过' : '存在异常';
+      const statusClass = status => status === 'passed' ? 'success' : 'danger';
+      async function request(url, options = {}) {
+        const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+        if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || `请求失败（${response.status}）`); }
+        return response.json();
+      }
+      function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); setTimeout(() => node.classList.remove('show'), 3600); }
+      function metric(label, value, note, tone = '') { return `<article class="metric ${tone}"><div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-sub">${note}</div></article>`; }
+      function renderMetrics() {
+        const { summary, findings, status } = state.report;
+        const critical = findings.filter(item => !item.passed && item.severity === 'critical').length;
+        $('#metrics').innerHTML = [
+          metric('执行规则', summary.rules, '覆盖奖励与配置数据'),
+          metric('失败规则', summary.failed_rules, summary.failed_rules ? '需要进入样本详情定位' : '本次检查无异常', statusClass(status)),
+          metric('问题总数', summary.total_findings, '按规则聚合的异常计数', statusClass(status)),
+          metric('严重风险', critical, critical ? '包含资产或关联完整性问题' : '未发现严重风险', critical ? 'danger' : 'success'),
+        ].join('');
+      }
+      function renderFilters() {
+        $('#filters').innerHTML = Object.entries(labels).map(([key, label]) => `<button class="filter ${state.filter === key ? 'active' : ''}" data-filter="${key}">${label}</button>`).join('');
+        $('#filters').querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { state.filter = button.dataset.filter; renderRules(); renderFilters(); }));
+      }
+      function visibleFindings() { return state.report.findings.filter(item => state.filter === 'all' || (state.filter === 'passed' ? item.passed : item.severity === state.filter && !item.passed)); }
+      function renderRules() {
+        const items = visibleFindings();
+        $('#rules-note').textContent = `显示 ${items.length} / ${state.report.findings.length} 条规则`;
+        if (!items.length) { $('#rules').innerHTML = '<div class="empty">当前筛选条件下没有规则。</div>'; return; }
+        $('#rules').innerHTML = items.map(item => {
+          const stateClass = item.passed ? 'passed' : `failed ${item.severity}`;
+          return `<article class="rule ${stateClass}"><div class="rule-stripe"></div><div><div class="rule-name"><strong>${escapeHtml(item.title)}</strong><span class="severity ${item.severity}">${item.severity.toUpperCase()}</span></div><div class="rule-code">${escapeHtml(item.rule)}</div><div class="rule-description">${escapeHtml(item.description)}</div></div><div class="rule-result"><div class="result-status">${item.passed ? '通过' : `发现 ${item.count} 项`}</div>${item.samples.length ? `<button class="samples-button" data-rule="${escapeHtml(item.rule)}">查看样本 →</button>` : ''}</div></article>`;
+        }).join('');
+        $('#rules').querySelectorAll('[data-rule]').forEach(button => button.addEventListener('click', () => openSamples(button.dataset.rule)));
+      }
+      function renderSeverity() {
+        const failures = state.report.findings.filter(item => !item.passed); const maximum = Math.max(failures.length, 1);
+        $('#severity').innerHTML = ['critical', 'high', 'medium'].map(level => { const count = failures.filter(item => item.severity === level).length; return `<div class="severity-row"><span>${labels[level]}</span><div class="bar ${level}"><span style="width:${count / maximum * 100}%"></span></div><strong>${count}</strong></div>`; }).join('');
+      }
+      function renderContext() {
+        const { run_id, trigger, generated_at, status } = state.report;
+        $('#run-status').textContent = statusText(status);
+        $('#context').innerHTML = [['运行编号', run_id ? `#${run_id}` : '预览'], ['触发来源', trigger === 'dashboard' ? '看板手动执行' : trigger === 'script' ? '本地脚本' : '接口预览'], ['完成时间', formatDate(generated_at)], ['检查状态', statusText(status)]].map(([key, value]) => `<div class="context-row"><span>${key}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+        $('#run-label').innerHTML = `最近执行<strong>${statusText(status)} · ${formatDate(generated_at)}</strong>`;
+      }
+      function renderHistory() {
+        $('#history-count').textContent = `${state.history.length} 条记录`;
+        $('#history').innerHTML = state.history.length ? state.history.map(run => `<div class="history-row"><span class="history-run">#${run.run_id}</span><span class="history-time">${formatDate(run.generated_at)}</span><span class="history-status ${run.status === 'failed' ? 'failed' : ''}">${statusText(run.status)}</span><span>${run.summary.total_findings} 项问题</span><button class="history-open" data-run="${run.run_id}" aria-label="查看 #${run.run_id}">→</button></div>`).join('') : '<div class="empty">暂无执行记录。</div>';
+        $('#history').querySelectorAll('[data-run]').forEach(button => button.addEventListener('click', async () => { try { state.report = await request(`/quality/runs/${button.dataset.run}`); state.filter = 'all'; renderAll(); } catch (error) { toast(error.message); } }));
+      }
+      function renderAll() { renderMetrics(); renderFilters(); renderRules(); renderSeverity(); renderContext(); renderHistory(); }
+      function openSamples(ruleCode) {
+        const finding = state.report.findings.find(item => item.rule === ruleCode); if (!finding) return;
+        $('#drawer-title').textContent = `${finding.title} · 异常样本`;
+        $('#drawer-subtitle').textContent = `${finding.rule} · 最多展示 3 条本地检查样本`;
+        $('#drawer-content').innerHTML = finding.samples.map((sample, index) => `<article class="sample-card"><h4>样本 ${index + 1}</h4>${Object.entries(sample).map(([key, value]) => `<div class="sample-row"><span>${keyLabels[key] || key}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</article>`).join('');
+        $('#drawer').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false');
+      }
+      function closeDrawer() { $('#drawer').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true'); }
+      async function refreshHistory() { state.history = (await request('/quality/runs?limit=12')).items; }
+      async function runCheck(showSuccess = true) {
+        const button = $('#run-button'); button.disabled = true; button.textContent = '检查运行中…';
+        try { state.report = await request('/quality/runs', { method: 'POST' }); await refreshHistory(); state.filter = 'all'; renderAll(); if (showSuccess) toast(`检查完成：${statusText(state.report.status)}`); } catch (error) { toast(`无法执行检查：${error.message}`); } finally { button.disabled = false; button.textContent = '运行质量检查'; }
+      }
+      async function initialize() { try { state.report = await request('/quality/runs/latest'); await refreshHistory(); renderAll(); } catch (error) { if (String(error.message).includes('尚无质量检查记录')) { await runCheck(false); } else { toast(`无法加载看板：${error.message}`); } } }
+      $('#run-button').addEventListener('click', () => runCheck()); $('#drawer-close').addEventListener('click', closeDrawer); $('#drawer').addEventListener('click', event => { if (event.target === $('#drawer')) closeDrawer(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDrawer(); });
+      initialize();
     </script>
   </body>
 </html>

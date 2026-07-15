@@ -82,4 +82,27 @@ def test_health_quality_report_and_dashboard_are_available():
     assert report.status_code == 200
     assert report.json()["summary"]["rules"] == 4
     assert dashboard.status_code == 200
-    assert "游戏服务质量看板" in dashboard.text
+    assert "Game QA Console" in dashboard.text
+
+
+def test_quality_run_api_persists_and_reads_a_snapshot():
+    seed()
+    client = TestClient(app)
+
+    created = client.post("/quality/runs")
+    run_id = created.json()["run_id"]
+    latest = client.get("/quality/runs/latest")
+    detail = client.get(f"/quality/runs/{run_id}")
+    history = client.get("/quality/runs?limit=5")
+
+    assert created.status_code == 201
+    assert created.json()["status"] == "passed"
+    assert latest.json()["run_id"] == run_id
+    assert detail.json()["findings"][0]["title"] == "重复发奖"
+    assert history.json()["items"][0]["run_id"] == run_id
+
+
+def test_quality_run_api_returns_404_for_missing_run():
+    response = TestClient(app).get("/quality/runs/999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "质量检查记录不存在"}

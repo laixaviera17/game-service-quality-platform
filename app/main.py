@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .database import initialize_database
-from .quality import run_quality_check
+from .quality import get_quality_run, list_quality_runs, run_quality_check
 from .service import GrantError, GrantNotFoundError, grant_reward, inventory, serialize
 
 
@@ -55,6 +55,32 @@ def get_inventory(player_id: str):
 @app.get("/quality/check")
 def quality_check():
     return run_quality_check()
+
+
+@app.post("/quality/runs", status_code=201)
+def create_quality_run():
+    return run_quality_check(persist=True, trigger="dashboard")
+
+
+@app.get("/quality/runs")
+def quality_runs(limit: int = 12):
+    return {"items": list_quality_runs(limit=max(1, min(limit, 50)))}
+
+
+@app.get("/quality/runs/latest")
+def latest_quality_run():
+    runs = list_quality_runs(limit=1)
+    if not runs:
+        raise HTTPException(status_code=404, detail="尚无质量检查记录")
+    return get_quality_run(runs[0]["run_id"])
+
+
+@app.get("/quality/runs/{run_id}")
+def quality_run_detail(run_id: int):
+    report = get_quality_run(run_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="质量检查记录不存在")
+    return report
 
 
 @app.get("/dashboard")

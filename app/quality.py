@@ -1,19 +1,34 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from .database import connect, initialize_database
 
 
-QUALITY_RULES = {
-    "duplicate_reward": "同一玩家在同一活动获得多次成功奖励",
-    "orphan_grant": "发奖记录关联的玩家或活动不存在",
-    "invalid_activity_status": "活动状态不在允许枚举范围内",
-    "negative_balance": "玩家宝石余额为负数",
-}
-
-
 SAMPLE_LIMIT = 3
+RULE_METADATA = {
+    "duplicate_reward": {
+        "title": "重复发奖",
+        "description": "同一玩家在同一活动获得多次成功奖励",
+        "severity": "high",
+    },
+    "orphan_grant": {
+        "title": "孤儿发奖记录",
+        "description": "发奖记录关联的玩家或活动不存在",
+        "severity": "critical",
+    },
+    "invalid_activity_status": {
+        "title": "非法活动状态",
+        "description": "活动状态不在允许枚举范围内",
+        "severity": "medium",
+    },
+    "negative_balance": {
+        "title": "负余额",
+        "description": "玩家宝石余额为负数",
+        "severity": "critical",
+    },
+}
 
 
 def _count(connection, statement: str) -> int:
@@ -24,85 +39,198 @@ def _samples(connection, statement: str) -> list[dict[str, object]]:
     return [dict(row) for row in connection.execute(statement).fetchmany(SAMPLE_LIMIT)]
 
 
-def run_quality_check() -> dict[str, object]:
+def _evaluate(connection) -> list[dict[str, object]]:
+    results = [
+        {
+            "rule": "duplicate_reward",
+            "count": _count(
+                connection,
+                """SELECT COUNT(*) FROM (
+                    SELECT player_id, activity_id FROM reward_grants
+                    WHERE status = 'success'
+                    GROUP BY player_id, activity_id HAVING COUNT(*) > 1
+                )""",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT player_id, activity_id, COUNT(*) AS grant_count
+                FROM reward_grants WHERE status = 'success'
+                GROUP BY player_id, activity_id HAVING COUNT(*) > 1
+                ORDER BY grant_count DESC, player_id, activity_id""",
+            ),
+        },
+        {
+            "rule": "orphan_grant",
+            "count": _count(
+                connection,
+                """SELECT COUNT(*) FROM reward_grants rg
+                LEFT JOIN players p ON p.player_id = rg.player_id
+                LEFT JOIN activities a ON a.activity_id = rg.activity_id
+                WHERE p.player_id IS NULL OR a.activity_id IS NULL""",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT rg.grant_id, rg.player_id, rg.activity_id
+                FROM reward_grants rg
+                LEFT JOIN players p ON p.player_id = rg.player_id
+                LEFT JOIN activities a ON a.activity_id = rg.activity_id
+                WHERE p.player_id IS NULL OR a.activity_id IS NULL
+                ORDER BY rg.grant_id""",
+            ),
+        },
+        {
+            "rule": "invalid_activity_status",
+            "count": _count(
+                connection,
+                "SELECT COUNT(*) FROM activities WHERE status NOT IN ('active', 'inactive')",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT activity_id, status FROM activities
+                WHERE status NOT IN ('active', 'inactive') ORDER BY activity_id""",
+            ),
+        },
+        {
+            "rule": "negative_balance",
+            "count": _count(
+                connection,
+                "SELECT COUNT(*) FROM players WHERE gem_balance < 0",
+            ),
+            "samples": _samples(
+                connection,
+                """SELECT player_id, gem_balance FROM players
+                WHERE gem_balance < 0 ORDER BY gem_balance, player_id""",
+            ),
+        },
+    ]
+    for finding in results:
+        metadata = RULE_METADATA[finding["rule"]]
+        finding.update(metadata)
+        finding["passed"] = finding["count"] == 0
+    return results
+
+
+def _summary(findings: list[dict[str, object]]) -> dict[str, int]:
+    return {
+        "rules": len(findings),
+        "failed_rules": sum(not item["passed"] for item in findings),
+        "total_findings": sum(int(item["count"]) for item in findings),
+    }
+
+
+def _save_run(connection, report: dict[str, object]) -> int:
+    summary = report["summary"]
+    cursor = connection.execute(
+        """INSERT INTO quality_runs
+           (trigger, started_at, completed_at, status, rules, failed_rules, total_findings)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            report["trigger"],
+            report["generated_at"],
+            report["generated_at"],
+            report["status"],
+            summary["rules"],
+            summary["failed_rules"],
+            summary["total_findings"],
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    for finding in report["findings"]:
+        connection.execute(
+            """INSERT INTO quality_run_findings
+               (run_id, rule, title, description, severity, finding_count, passed, samples_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id,
+                finding["rule"],
+                finding["title"],
+                finding["description"],
+                finding["severity"],
+                finding["count"],
+                int(finding["passed"]),
+                json.dumps(finding["samples"], ensure_ascii=False),
+            ),
+        )
+    return run_id
+
+
+def run_quality_check(*, persist: bool = False, trigger: str = "script") -> dict[str, object]:
+    """Evaluate all rules and optionally persist a local execution snapshot."""
+    initialize_database()
+    generated_at = datetime.now(UTC).isoformat()
+    with connect() as connection:
+        findings = _evaluate(connection)
+        summary = _summary(findings)
+        report: dict[str, object] = {
+            "run_id": None,
+            "trigger": trigger,
+            "generated_at": generated_at,
+            "status": "failed" if summary["failed_rules"] else "passed",
+            "summary": summary,
+            "findings": findings,
+        }
+        if persist:
+            report["run_id"] = _save_run(connection, report)
+    return report
+
+
+def get_quality_run(run_id: int) -> dict[str, object] | None:
     initialize_database()
     with connect() as connection:
-        findings = [
-            {
-                "rule": "duplicate_reward",
-                "severity": "high",
-                "count": _count(
-                    connection,
-                    """SELECT COUNT(*) FROM (
-                        SELECT player_id, activity_id FROM reward_grants
-                        WHERE status = 'success'
-                        GROUP BY player_id, activity_id HAVING COUNT(*) > 1
-                    )""",
-                ),
-                "samples": _samples(
-                    connection,
-                    """SELECT player_id, activity_id, COUNT(*) AS grant_count
-                    FROM reward_grants WHERE status = 'success'
-                    GROUP BY player_id, activity_id HAVING COUNT(*) > 1
-                    ORDER BY grant_count DESC, player_id, activity_id""",
-                ),
-            },
-            {
-                "rule": "orphan_grant",
-                "severity": "critical",
-                "count": _count(
-                    connection,
-                    """SELECT COUNT(*) FROM reward_grants rg
-                    LEFT JOIN players p ON p.player_id = rg.player_id
-                    LEFT JOIN activities a ON a.activity_id = rg.activity_id
-                    WHERE p.player_id IS NULL OR a.activity_id IS NULL""",
-                ),
-                "samples": _samples(
-                    connection,
-                    """SELECT rg.grant_id, rg.player_id, rg.activity_id
-                    FROM reward_grants rg
-                    LEFT JOIN players p ON p.player_id = rg.player_id
-                    LEFT JOIN activities a ON a.activity_id = rg.activity_id
-                    WHERE p.player_id IS NULL OR a.activity_id IS NULL
-                    ORDER BY rg.grant_id""",
-                ),
-            },
-            {
-                "rule": "invalid_activity_status",
-                "severity": "medium",
-                "count": _count(
-                    connection,
-                    "SELECT COUNT(*) FROM activities WHERE status NOT IN ('active', 'inactive')",
-                ),
-                "samples": _samples(
-                    connection,
-                    """SELECT activity_id, status FROM activities
-                    WHERE status NOT IN ('active', 'inactive') ORDER BY activity_id""",
-                ),
-            },
-            {
-                "rule": "negative_balance",
-                "severity": "critical",
-                "count": _count(
-                    connection,
-                    "SELECT COUNT(*) FROM players WHERE gem_balance < 0",
-                ),
-                "samples": _samples(
-                    connection,
-                    """SELECT player_id, gem_balance FROM players
-                    WHERE gem_balance < 0 ORDER BY gem_balance, player_id""",
-                ),
-            },
-        ]
-    for finding in findings:
-        finding["description"] = QUALITY_RULES[finding["rule"]]
-        finding["passed"] = finding["count"] == 0
+        run = connection.execute(
+            "SELECT * FROM quality_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        if not run:
+            return None
+        finding_rows = connection.execute(
+            """SELECT rule, title, description, severity, finding_count, passed, samples_json
+            FROM quality_run_findings WHERE run_id = ? ORDER BY rowid""",
+            (run_id,),
+        ).fetchall()
     return {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "run_id": run["run_id"],
+        "trigger": run["trigger"],
+        "generated_at": run["completed_at"],
+        "status": run["status"],
         "summary": {
-            "rules": len(findings),
-            "failed_rules": sum(not item["passed"] for item in findings),
-            "total_findings": sum(item["count"] for item in findings),
+            "rules": run["rules"],
+            "failed_rules": run["failed_rules"],
+            "total_findings": run["total_findings"],
         },
-        "findings": findings,
+        "findings": [
+            {
+                "rule": row["rule"],
+                "title": row["title"],
+                "description": row["description"],
+                "severity": row["severity"],
+                "count": row["finding_count"],
+                "passed": bool(row["passed"]),
+                "samples": json.loads(row["samples_json"]),
+            }
+            for row in finding_rows
+        ],
     }
+
+
+def list_quality_runs(limit: int = 12) -> list[dict[str, object]]:
+    initialize_database()
+    with connect() as connection:
+        rows = connection.execute(
+            """SELECT run_id, trigger, completed_at, status, rules, failed_rules, total_findings
+            FROM quality_runs ORDER BY run_id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "run_id": row["run_id"],
+            "trigger": row["trigger"],
+            "generated_at": row["completed_at"],
+            "status": row["status"],
+            "summary": {
+                "rules": row["rules"],
+                "failed_rules": row["failed_rules"],
+                "total_findings": row["total_findings"],
+            },
+        }
+        for row in rows
+    ]

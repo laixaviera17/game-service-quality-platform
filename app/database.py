@@ -62,5 +62,29 @@ def initialize_database() -> None:
                 FOREIGN KEY (player_id) REFERENCES players(player_id),
                 FOREIGN KEY (activity_id) REFERENCES activities(activity_id)
             );
+
+            CREATE TABLE IF NOT EXISTS quality_runs (
+                run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('passed', 'failed')),
+                rules INTEGER NOT NULL,
+                failed_rules INTEGER NOT NULL,
+                total_findings INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS quality_run_findings (
+                run_id INTEGER NOT NULL,
+                rule TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                finding_count INTEGER NOT NULL,
+                passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+                samples_json TEXT NOT NULL,
+                PRIMARY KEY (run_id, rule),
+                FOREIGN KEY (run_id) REFERENCES quality_runs(run_id)
+            );
             """
         )
