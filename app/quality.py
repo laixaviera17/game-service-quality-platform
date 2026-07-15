@@ -175,7 +175,7 @@ def _save_run(connection, report: dict[str, object]) -> int:
     summary = report["summary"]
     cursor = connection.execute(
         text("""INSERT INTO quality_runs
-           (trigger, started_at, completed_at, status, rules, failed_rules, total_findings)
+           (`trigger`, started_at, completed_at, status, rules, failed_rules, total_findings)
            VALUES (:trigger, :started_at, :completed_at, :status, :rules, :failed_rules, :total_findings)"""),
         {
             "trigger": report["trigger"], "started_at": report["generated_at"],
@@ -260,7 +260,7 @@ def list_quality_runs(limit: int = 12) -> list[dict[str, object]]:
     initialize_database()
     with connect() as connection:
         rows = connection.execute(
-            text("""SELECT run_id, trigger, completed_at, status, rules, failed_rules, total_findings
+            text("""SELECT run_id, `trigger`, completed_at, status, rules, failed_rules, total_findings
             FROM quality_runs ORDER BY run_id DESC LIMIT :limit"""),
             {"limit": limit},
         ).mappings().all()

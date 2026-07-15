@@ -31,7 +31,7 @@ def create_test_run(trigger: str = "api") -> int:
     with connect() as connection:
         cursor = connection.execute(
             text(
-                """INSERT INTO test_runs (trigger, status, started_at, total_cases, passed_cases, failed_cases)
+                """INSERT INTO test_runs (`trigger`, status, started_at, total_cases, passed_cases, failed_cases)
                 VALUES (:trigger, 'queued', :started_at, 0, 0, 0)"""
             ),
             {"trigger": trigger, "started_at": _now()},
