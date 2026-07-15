@@ -16,7 +16,7 @@
 运行命令：
 
 ```bash
-pytest -q --cov=app --cov-report=term-missing
+python3 -m pytest -q --cov=app --cov-report=term-missing
 ```
 
 所有异常数据均由本地演示脚本构造，不来自外部或真实业务数据。

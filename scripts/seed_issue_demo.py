@@ -32,7 +32,7 @@ def seed_issue_demo_data() -> None:
 
 def main() -> None:
     seed_issue_demo_data()
-    print("Issue demo data seeded. Run `python -m scripts.run_quality_check` or open /dashboard.")
+    print("Issue demo data seeded. Run `python3 -m scripts.run_quality_check` or open /dashboard.")
 
 
 if __name__ == "__main__":

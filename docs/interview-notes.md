@@ -13,9 +13,9 @@
 
 ## 现场演示顺序
 
-1. 运行 `python -m scripts.seed_demo` 和 `python -m scripts.run_quality_check`，展示 4 条规则全部通过。
-2. 运行 `python -m scripts.seed_issue_demo`，再刷新 `/dashboard`，展示每条规则的失败计数、严重级别与异常样本。
-3. 运行 `pytest -q --cov=app --cov-report=term-missing`，展示接口、服务层和质量检查用例共同验证核心路径。
+1. 运行 `python3 -m scripts.seed_demo` 和 `python3 -m scripts.run_quality_check`，展示 4 条规则全部通过。
+2. 运行 `python3 -m scripts.seed_issue_demo`，再刷新 `/dashboard`，展示每条规则的失败计数、严重级别与异常样本。
+3. 运行 `python3 -m pytest -q --cov=app --cov-report=term-missing`，展示接口、服务层和质量检查用例共同验证核心路径。
 
 ## 可继续迭代
 
