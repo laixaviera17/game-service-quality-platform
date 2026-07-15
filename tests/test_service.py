@@ -35,3 +35,13 @@ def test_stock_shortage_is_rejected_without_mutating_balance():
     with pytest.raises(GrantError, match="库存不足"):
         grant_reward("p1", "a1", "request-002")
     assert inventory("p1")["gem_balance"] == 100
+
+
+def test_inactive_activity_is_rejected_without_mutating_balance():
+    with connect() as connection:
+        connection.execute("INSERT INTO players VALUES ('p1', 'Tester', 0)")
+        connection.execute("INSERT INTO activities VALUES ('a1', 'Login', 100, 1, 'inactive')")
+
+    with pytest.raises(GrantError, match="活动未开启"):
+        grant_reward("p1", "a1", "request-inactive")
+    assert inventory("p1")["gem_balance"] == 0

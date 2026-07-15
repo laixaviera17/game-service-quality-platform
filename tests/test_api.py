@@ -69,3 +69,17 @@ def test_grant_api_reports_conflict_without_changing_inventory():
     assert conflict.status_code == 409
     assert conflict.json() == {"detail": "奖励库存不足"}
     assert client.get("/players/p1/inventory").json()["gem_balance"] == 200
+
+
+def test_health_quality_report_and_dashboard_are_available():
+    client = TestClient(app)
+
+    health = client.get("/health")
+    report = client.get("/quality/check")
+    dashboard = client.get("/dashboard")
+
+    assert health.json() == {"status": "ok"}
+    assert report.status_code == 200
+    assert report.json()["summary"]["rules"] == 4
+    assert dashboard.status_code == 200
+    assert "游戏服务质量看板" in dashboard.text

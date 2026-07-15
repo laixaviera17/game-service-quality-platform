@@ -11,6 +11,12 @@
 3. 将重复发奖、孤儿记录、非法配置、负资产拆为独立质量规则；每条规则输出计数和最多 3 条异常样本，便于从看板继续定位数据。
 4. 将玩家或活动不存在映射为 404；库存不足、活动未开启和幂等键冲突映射为 409，并在 API 测试中校验响应契约与余额不变性。
 
+## 现场演示顺序
+
+1. 运行 `python -m scripts.seed_demo` 和 `python -m scripts.run_quality_check`，展示 4 条规则全部通过。
+2. 运行 `python -m scripts.seed_issue_demo`，再刷新 `/dashboard`，展示每条规则的失败计数、严重级别与异常样本。
+3. 运行 `pytest -q --cov=app --cov-report=term-missing`，展示接口、服务层和质量检查用例共同验证核心路径。
+
 ## 可继续迭代
 
 - SQLite 改 MySQL，增加 Redis 幂等缓存与消息队列异步发奖。

@@ -39,6 +39,17 @@ python -m scripts.run_quality_check
 
 项目将把报告写入 `reports/latest.json`。测试数据库由环境变量 `GAME_QA_DB` 指定；未指定时使用 `data/game_quality.db`。
 
+## 异常演示
+
+默认 `seed_demo` 写入的是全部通过质量检查的本地数据。需要演示完整定位流程时，运行：
+
+```bash
+python -m scripts.seed_issue_demo
+python -m scripts.run_quality_check
+```
+
+此脚本仅在本地 SQLite 数据库中构造重复发奖、孤儿记录、非法状态和负余额四类数据。随后访问 `/dashboard`，可查看规则的失败计数、严重级别和异常样本；重新运行 `python -m scripts.seed_demo` 即可恢复为通过状态。测试场景见 [测试用例矩阵](docs/test-cases.md)。
+
 ## 简历表述（按实际完成情况使用）
 
 **游戏服务质量与数据校验平台｜个人项目**

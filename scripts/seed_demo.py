@@ -1,7 +1,8 @@
 from app.database import connect, initialize_database
 
 
-def main() -> None:
+def seed_demo_data() -> None:
+    """Reset the local database to a valid, passing demo dataset."""
     initialize_database()
     with connect() as connection:
         connection.execute("DELETE FROM reward_grants")
@@ -19,6 +20,10 @@ def main() -> None:
                 ("event_closed", "已关闭活动", 60, 0, "inactive"),
             ],
         )
+
+
+def main() -> None:
+    seed_demo_data()
     print("Demo data seeded.")
 
 
