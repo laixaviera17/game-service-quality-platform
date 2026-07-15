@@ -105,7 +105,7 @@ def grant_reward(player_id: str, activity_id: str, idempotency_key: str) -> Gran
                 "activity_id": activity_id,
                 "idempotency_key": idempotency_key,
                 "reward_gems": activity["reward_gems"],
-                "created_at": datetime.now(UTC).isoformat(),
+                "created_at": datetime.now(UTC),
             },
         )
         return GrantResult(

@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     MetaData,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    func,
     inspect,
     text,
 )
@@ -59,7 +61,7 @@ reward_grants = Table(
     Column("idempotency_key", String(128), nullable=False, unique=True),
     Column("reward_gems", Integer, nullable=False),
     Column("status", String(16), nullable=False),
-    Column("created_at", String(40), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
 quality_runs = Table(
     "quality_runs",
