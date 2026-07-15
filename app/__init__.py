@@ -1,1 +1,1 @@
-"""Game Service Quality Platform."""
+"""Reward delivery reliability experiment."""

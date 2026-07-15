@@ -11,7 +11,8 @@ def test_reliability_experiments_preserve_single_wallet_effect(scenario: str):
     report = execute_reliability_run(run_id)
 
     assert report["status"] == "passed"
-    assert report["summary"]["passed"] is True
+    assert report["summary"]["verification_passed"] is True
+    assert report["summary"]["invariant_passed"] is True
     assert report["summary"]["actual"]["ledger_entries"] == 1
     assert report["summary"]["actual"]["balance"] == 100
     assert report["summary"]["actual"]["delivery_statuses"] == ["delivered"]
@@ -24,7 +25,7 @@ def test_reliability_api_exposes_scenarios_run_history_and_timeline():
     created = client.post("/reliability/runs", json={"scenario": "acknowledgement_loss"})
 
     assert scenarios.status_code == 200
-    assert len(scenarios.json()["items"]) == 3
+    assert len(scenarios.json()["items"]) == 4
     assert created.status_code == 201
     report = created.json()
     assert report["summary"]["actual"]["delivery_attempts"] >= 2
@@ -33,3 +34,15 @@ def test_reliability_api_exposes_scenarios_run_history_and_timeline():
     trend = client.get("/reliability/trend")
     assert history.json()["items"][0]["run_id"] == report["run_id"]
     assert trend.json()["total_runs"] == 1
+
+
+def test_guard_disabled_control_is_detected_by_the_same_invariant_check():
+    run_id = create_reliability_run("guard_disabled_control", trigger="test")
+    report = execute_reliability_run(run_id)
+
+    assert report["status"] == "detected"
+    assert report["summary"]["verification_passed"] is True
+    assert report["summary"]["invariant_passed"] is False
+    assert report["summary"]["actual"]["ledger_entries"] == 0
+    assert report["summary"]["actual"]["balance"] == 200
+    assert any(event["kind"] == "detection" for event in report["events"])

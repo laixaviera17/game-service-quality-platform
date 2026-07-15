@@ -10,7 +10,7 @@ def _redis_url() -> str:
 
 
 celery_app = Celery(
-    "game_quality_platform",
+    "reward_delivery_reliability_lab",
     broker=_redis_url(),
     backend=os.getenv("CELERY_RESULT_BACKEND", _redis_url()),
     include=["app.tasks"],
@@ -22,18 +22,24 @@ def uses_async_worker() -> bool:
     return os.getenv("EXECUTION_MODE", "sync").lower() == "celery"
 
 
-def dispatch_test_run(run_id: int) -> str:
-    """Local execution stays simple; Docker sends the run through Redis/Celery."""
-    if uses_async_worker():
-        celery_app.send_task("app.tasks.execute_service_test_run", args=[run_id])
-        return "queued"
-    from .test_runner import execute_test_run
-    execute_test_run(run_id)
-    return "completed"
+def dependency_health() -> dict[str, bool]:
+    redis_ok = worker_ok = False
+    try:
+        connection = celery_app.connection_for_read()
+        connection.ensure_connection(max_retries=1)
+        redis_ok = True
+        connection.release()
+    except Exception:
+        redis_ok = False
+    if redis_ok:
+        try:
+            worker_ok = bool(celery_app.control.ping(timeout=0.7))
+        except Exception:
+            worker_ok = False
+    return {"redis": redis_ok, "worker": worker_ok}
 
 
 def dispatch_reliability_run(run_id: int) -> str:
-    """Run reliability experiments locally or through the same Redis/Celery path."""
     if uses_async_worker():
         celery_app.send_task("app.tasks.execute_reliability_run", args=[run_id])
         return "queued"

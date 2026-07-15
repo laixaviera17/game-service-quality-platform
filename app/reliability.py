@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 from sqlalchemy import text
@@ -22,8 +21,12 @@ SCENARIOS = {
         "description": "首次消费已写入账本但确认丢失；重试消费不得再次增加余额。",
     },
     "concurrent_consume": {
-        "title": "并发重复消费",
-        "description": "同一事件被两个消费者同时处理；账本唯一约束保证最终只产生一笔入账。",
+        "title": "并行消费尝试",
+        "description": "同一事件被两个并行处理尝试处理；账本唯一约束保证最终只产生一笔入账。",
+    },
+    "guard_disabled_control": {
+        "title": "账本守卫失效对照",
+        "description": "对照路径故意跳过账本写入，验证实验能检出重复余额副作用，而不是永远显示通过。",
     },
 }
 
@@ -115,9 +118,9 @@ def _complete_delivery(connection, order_id: str) -> None:
     )
 
 
-def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = False) -> str:
+def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = False, synchronize: bool = False, task_id: str | None = None) -> str:
     """Apply a delivery effect. A unique ledger row is the idempotency boundary for consumers."""
-    _event(run_id, "consume", "消费者开始处理 Outbox 事件", order_id=order_id, lose_acknowledgement=lose_acknowledgement)
+    _event(run_id, "consume", "消费者开始处理 Outbox 事件", order_id=order_id, lose_acknowledgement=lose_acknowledgement, synchronize=synchronize, task_id=task_id)
     try:
         with connect() as connection:
             order = connection.execute(
@@ -136,6 +139,8 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
                 _complete_delivery(connection, order_id)
                 outcome = "duplicate_consumer"
             else:
+                if synchronize and get_engine().dialect.name == "mysql":
+                    connection.execute(text("SELECT SLEEP(0.15)"))
                 connection.execute(
                     text("""INSERT INTO delivery_wallet_ledger (order_id, player_id, reward_gems, created_at)
                         VALUES (:order_id, :player_id, :reward_gems, :created_at)"""),
@@ -166,6 +171,31 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
     else:
         _event(run_id, "effect", "账本流水与余额变更已提交，事件标记为已消费", order_id=order_id)
     return outcome
+
+
+def consume_delivery_attempt(run_id: int, order_id: str, *, synchronize: bool = False, task_id: str | None = None) -> str:
+    """Entry point for one independent Celery consumer task."""
+    return _deliver_once(run_id, order_id, synchronize=synchronize, task_id=task_id)
+
+
+def _deliver_without_ledger_guard(run_id: int, order_id: str) -> None:
+    """Controlled negative path: simulate a consumer that mutates balance without the ledger boundary."""
+    _event(run_id, "control", "对照消费者跳过账本守卫并直接执行余额变更", order_id=order_id)
+    with connect() as connection:
+        order = connection.execute(
+            text("SELECT player_id, reward_gems FROM delivery_orders WHERE order_id = :order_id"),
+            {"order_id": order_id},
+        ).mappings().one()
+        connection.execute(
+            text("UPDATE delivery_outbox_events SET attempt_count = attempt_count + 1 WHERE order_id = :order_id"),
+            {"order_id": order_id},
+        )
+        connection.execute(
+            text("UPDATE players SET gem_balance = gem_balance + :reward_gems WHERE player_id = :player_id"),
+            {"reward_gems": order["reward_gems"], "player_id": order["player_id"]},
+        )
+        _complete_delivery(connection, order_id)
+    _event(run_id, "control", "对照消费者完成一次未受账本保护的余额变更", order_id=order_id)
 
 
 def _snapshot(run_id: int, player_id: str) -> dict[str, object]:
@@ -199,6 +229,64 @@ def _assert_invariants(run_id: int, player_id: str, scenario: str) -> dict[str, 
     return {"passed": passed, "expected": expected, "actual": actual}
 
 
+def _finish_reliability_run(run_id: int, player_id: str, scenario: str) -> dict[str, object]:
+    try:
+        assertion = _assert_invariants(run_id, player_id, scenario)
+        if scenario == "guard_disabled_control":
+            verification_passed = not assertion["passed"]
+            status = "detected" if verification_passed else "failed"
+            _event(run_id, "detection", "已检出账本守卫失效导致的重复余额副作用" if verification_passed else "对照失效未被检出", **assertion)
+        else:
+            verification_passed = assertion["passed"]
+            status = "passed" if verification_passed else "failed"
+            _event(run_id, "assertion", "最终不变量校验通过" if verification_passed else "最终不变量校验失败", **assertion)
+        error_message = None
+    except Exception as error:
+        assertion = {"passed": False, "expected": {}, "actual": {}}
+        verification_passed = False
+        status = "failed"
+        error_message = f"{type(error).__name__}: {error}"
+        _event(run_id, "error", "实验执行出现异常", error_message=error_message)
+    with connect() as connection:
+        connection.execute(
+            text("""UPDATE reliability_runs SET status = :status, completed_at = :completed_at, passed = :passed,
+                summary_json = :summary_json, error_message = :error_message WHERE run_id = :run_id"""),
+            {"status": status, "completed_at": _now(), "passed": int(verification_passed), "summary_json": json.dumps({"verification_passed": verification_passed, "invariant_passed": assertion["passed"], **assertion}, ensure_ascii=False), "error_message": error_message, "run_id": run_id},
+        )
+    return get_reliability_run(run_id) or {}
+
+
+def finalize_concurrent_reliability_run(run_id: int, player_id: str) -> dict[str, object]:
+    """Celery chord callback: both independent consumer tasks have completed."""
+    return _finish_reliability_run(run_id, player_id, "concurrent_consume")
+
+
+def _schedule_concurrent_consumers(run_id: int, order_id: str, player_id: str) -> None:
+    from celery import chord, group
+
+    from .task_queue import celery_app
+
+    consumers = group(
+        celery_app.signature("app.tasks.consume_delivery_attempt", args=[run_id, order_id, True]),
+        celery_app.signature("app.tasks.consume_delivery_attempt", args=[run_id, order_id, True]),
+    )
+    callback = celery_app.signature("app.tasks.finalize_concurrent_reliability_run", args=[run_id, player_id])
+    chord(consumers)(callback)
+    _event(run_id, "schedule", "已提交两个独立 Celery 消费任务，等待回调任务执行最终断言", order_id=order_id)
+
+
+def _mark_run_failed(run_id: int, error: Exception) -> dict[str, object]:
+    message = f"{type(error).__name__}: {error}"
+    _event(run_id, "error", "实验执行出现异常", error_message=message)
+    with connect() as connection:
+        connection.execute(
+            text("""UPDATE reliability_runs SET status = 'failed', completed_at = :completed_at, passed = 0,
+                summary_json = :summary_json, error_message = :error_message WHERE run_id = :run_id"""),
+            {"completed_at": _now(), "summary_json": json.dumps({"verification_passed": False, "invariant_passed": False, "passed": False, "expected": {}, "actual": {}}, ensure_ascii=False), "error_message": message, "run_id": run_id},
+        )
+    return get_reliability_run(run_id) or {}
+
+
 def execute_reliability_run(run_id: int) -> dict[str, object]:
     initialize_database()
     with connect() as connection:
@@ -210,10 +298,9 @@ def execute_reliability_run(run_id: int) -> dict[str, object]:
     try:
         player_id = _create_player(run_id)
         _event(run_id, "setup", "创建实验玩家，初始余额为 0", player_id=player_id, initial_balance=0)
-        key = f"reliability_{run_id}_request"
-        order_id, duplicate = _request_reward(run_id, player_id, key)
+        order_id, duplicate = _request_reward(run_id, player_id, f"reliability_{run_id}_request")
         if scenario == "duplicate_request":
-            repeated_order, repeated_duplicate = _request_reward(run_id, player_id, key)
+            repeated_order, repeated_duplicate = _request_reward(run_id, player_id, f"reliability_{run_id}_request")
             if repeated_order != order_id or not repeated_duplicate or duplicate:
                 raise AssertionError("重复请求没有稳定命中同一张订单")
             _deliver_once(run_id, order_id)
@@ -221,31 +308,20 @@ def execute_reliability_run(run_id: int) -> dict[str, object]:
             _deliver_once(run_id, order_id, lose_acknowledgement=True)
             _deliver_once(run_id, order_id)
         elif scenario == "concurrent_consume":
-            # SQLite is a local fallback and serializes writers at database level; MySQL executes both consumers concurrently.
             if get_engine().dialect.name == "sqlite":
                 _deliver_once(run_id, order_id)
                 _deliver_once(run_id, order_id)
             else:
-                with ThreadPoolExecutor(max_workers=2) as executor:
-                    list(executor.map(lambda _: _deliver_once(run_id, order_id), range(2)))
+                _schedule_concurrent_consumers(run_id, order_id, player_id)
+                return get_reliability_run(run_id) or {}
+        elif scenario == "guard_disabled_control":
+            _deliver_without_ledger_guard(run_id, order_id)
+            _deliver_without_ledger_guard(run_id, order_id)
         else:
             raise ValueError("不支持的可靠性实验场景")
-        assertion = _assert_invariants(run_id, player_id, scenario)
-        status = "passed" if assertion["passed"] else "failed"
-        _event(run_id, "assertion", "最终不变量校验通过" if assertion["passed"] else "最终不变量校验失败", **assertion)
-        error_message = None
     except Exception as error:
-        assertion = {"passed": False, "expected": {}, "actual": {}}
-        status = "failed"
-        error_message = f"{type(error).__name__}: {error}"
-        _event(run_id, "error", "实验执行出现异常", error_message=error_message)
-    with connect() as connection:
-        connection.execute(
-            text("""UPDATE reliability_runs SET status = :status, completed_at = :completed_at, passed = :passed,
-                summary_json = :summary_json, error_message = :error_message WHERE run_id = :run_id"""),
-            {"status": status, "completed_at": _now(), "passed": int(assertion["passed"]), "summary_json": json.dumps(assertion, ensure_ascii=False), "error_message": error_message, "run_id": run_id},
-        )
-    return get_reliability_run(run_id) or {}
+        return _mark_run_failed(run_id, error)
+    return _finish_reliability_run(run_id, player_id, scenario)
 
 
 def get_reliability_run(run_id: int) -> dict[str, object] | None:
@@ -270,6 +346,6 @@ def list_reliability_runs(limit: int = 12) -> list[dict[str, object]]:
 
 def reliability_trend(limit: int = 12) -> dict[str, object]:
     runs = list_reliability_runs(limit)
-    finished = [run for run in runs if run["status"] in {"passed", "failed"}]
-    passed = sum(run["status"] == "passed" for run in finished)
-    return {"total_runs": len(finished), "passed_runs": passed, "failed_runs": len(finished) - passed, "pass_rate": round(passed / len(finished) * 100, 1) if finished else 0, "points": list(reversed(finished))}
+    finished = [run for run in runs if run["status"] in {"passed", "detected", "failed"}]
+    passed = sum(run["status"] in {"passed", "detected"} for run in finished)
+    return {"total_runs": len(finished), "verified_runs": passed, "failed_runs": len(finished) - passed, "verification_rate": round(passed / len(finished) * 100, 1) if finished else 0, "points": list(reversed(finished))}

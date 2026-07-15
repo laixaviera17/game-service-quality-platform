@@ -44,7 +44,7 @@ services:
 
   worker:
     build: .
-    command: celery -A app.task_queue.celery_app worker --loglevel=INFO --concurrency=1
+    command: celery -A app.task_queue.celery_app worker --loglevel=INFO --concurrency=4
     environment: *app_environment
     depends_on:
       mysql:
