@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-label="Reward Delivery Reliability Lab dashboard preview">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -14,39 +15,39 @@
   <rect x="72" y="68" width="44" height="44" rx="12" fill="url(#accent)"/>
   <text x="88" y="98" fill="#081323" font-family="ui-sans-serif, sans-serif" font-size="22" font-weight="900">R</text>
   <text x="132" y="88" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11" font-weight="700">LOCAL RELIABILITY EXPERIMENT</text>
-  <text x="132" y="112" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="22" font-weight="700">?????????</text>
+  <text x="132" y="112" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="22" font-weight="700">奖励发放可靠性实验</text>
   <text x="132" y="132" fill="#9aacca" font-family="ui-sans-serif, sans-serif" font-size="13">Reward Delivery Reliability Lab</text>
-  <text x="820" y="98" fill="#58d8a8" font-family="ui-sans-serif, sans-serif" font-size="13">???mysql ? ? redis ? ? worker ?</text>
-  <text x="72" y="168" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="18" font-weight="700">??????</text>
+  <text x="820" y="98" fill="#58d8a8" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13">实探：mysql ✓ · redis ✓ · worker ✓</text>
+  <text x="72" y="168" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="18" font-weight="700">选择验证场景</text>
   <rect x="72" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#294064"/>
   <rect x="338" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#294064"/>
   <rect x="604" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#61e4ff"/>
   <rect x="870" y="186" width="250" height="120" rx="12" fill="#2a2418" stroke="#f8bb69"/>
   <text x="92" y="214" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11">duplicate_request</text>
-  <text x="92" y="238" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="15" font-weight="700">????</text>
+  <text x="92" y="238" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="15" font-weight="700">重复请求</text>
   <text x="358" y="214" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11">acknowledgement_loss</text>
-  <text x="358" y="238" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="15" font-weight="700">???????</text>
+  <text x="358" y="238" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="15" font-weight="700">确认丢失后重试</text>
   <text x="624" y="214" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11">concurrent_consume</text>
-  <text x="624" y="238" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="15" font-weight="700">??????</text>
+  <text x="624" y="238" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="15" font-weight="700">并行消费尝试</text>
   <text x="890" y="214" fill="#f8bb69" font-family="ui-monospace, monospace" font-size="11">guard_disabled_control</text>
-  <text x="890" y="238" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="15" font-weight="700">????????</text>
-  <text x="890" y="262" fill="#f8bb69" font-family="ui-sans-serif, sans-serif" font-size="12">???? ? ?????</text>
+  <text x="890" y="238" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="15" font-weight="700">账本守卫失效对照</text>
+  <text x="890" y="262" fill="#f8bb69" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12">阴性对照 · 期望已检出</text>
   <rect x="980" y="330" width="140" height="40" rx="9" fill="url(#accent)"/>
-  <text x="1008" y="356" fill="#071326" font-family="ui-sans-serif, sans-serif" font-size="14" font-weight="700">????</text>
+  <text x="1008" y="356" fill="#071326" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="14" font-weight="700">运行实验</text>
   <rect x="72" y="400" width="700" height="170" rx="12" fill="#0f192f" stroke="#294064"/>
-  <text x="92" y="430" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="15" font-weight="700">???????</text>
+  <text x="92" y="430" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="15" font-weight="700">本次实验事件</text>
   <circle cx="100" cy="468" r="5" fill="#61e4ff"/>
-  <text x="118" y="473" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="13">Outbox ?????????</text>
+  <text x="118" y="473" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13">Outbox 轮询发现待消费事件</text>
   <circle cx="100" cy="502" r="5" fill="#58d8a8"/>
-  <text x="118" y="507" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="13">???????????</text>
+  <text x="118" y="507" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13">账本流水与余额变更已提交</text>
   <circle cx="100" cy="536" r="5" fill="#f8bb69"/>
-  <text x="118" y="541" fill="#eff5ff" font-family="ui-sans-serif, sans-serif" font-size="13">?????????? 200 / ?? 0?</text>
+  <text x="118" y="541" fill="#eff5ff" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13">检测到重复余额变更：200 / 账本 0</text>
   <rect x="800" y="400" width="320" height="170" rx="12" fill="#162542" stroke="#f8bb69"/>
-  <text x="820" y="430" fill="#f8bb69" font-family="ui-sans-serif, sans-serif" font-size="14" font-weight="700">???????</text>
-  <text x="820" y="458" fill="#9aacca" font-family="ui-sans-serif, sans-serif" font-size="12">???????????</text>
-  <text x="820" y="492" fill="#9aacca" font-family="ui-sans-serif, sans-serif" font-size="12">????</text>
+  <text x="820" y="430" fill="#f8bb69" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="14" font-weight="700">账本守卫失效已检出</text>
+  <text x="820" y="458" fill="#9aacca" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12">阴性对照触发重复余额变更</text>
+  <text x="820" y="492" fill="#9aacca" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12">玩家余额</text>
   <text x="980" y="492" fill="#ff7893" font-family="ui-monospace, monospace" font-size="12">200</text>
-  <text x="820" y="520" fill="#9aacca" font-family="ui-sans-serif, sans-serif" font-size="12">????</text>
+  <text x="820" y="520" fill="#9aacca" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12">账本流水</text>
   <text x="980" y="520" fill="#ff7893" font-family="ui-monospace, monospace" font-size="12">0</text>
-  <text x="72" y="598" fill="#9aacca" font-family="ui-sans-serif, sans-serif" font-size="11">?????=?? ? ??=??? ? ??=??</text>
+  <text x="72" y="598" fill="#9aacca" font-family="ui-sans-serif, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="11">绿色=通过 · 琥珀色=已检出 · 红色=失败</text>
 </svg>
