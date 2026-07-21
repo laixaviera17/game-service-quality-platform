@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-label="Reward Delivery Reliability Lab dashboard preview">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1b3264"/>
+      <stop offset="35%" stop-color="#080e1d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#61e4ff"/>
+      <stop offset="100%" stop-color="#8bafff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="640" fill="url(#bg)"/>
+  <rect x="40" y="36" width="1120" height="568" rx="18" fill="#101a31" stroke="#294064"/>
+  <rect x="72" y="68" width="44" height="44" rx="12" fill="url(#accent)"/>
+  <text x="132" y="88" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11" font-weight="700">LOCAL RELIABILITY EXPERIMENT</text>
+  <text x="132" y="112" fill="#eff5ff" font-family="Inter, sans-serif" font-size="24" font-weight="700">V±Ñ>ï`'Œ</text>
+  <text x="900" y="98" fill="#58d8a8" font-family="Inter, sans-serif" font-size="13">¢mysql  · redis  · worker </text>
+  <text x="72" y="162" fill="#eff5ff" font-family="Inter, sans-serif" font-size="18" font-weight="700">	éŒÁ:o</text>
+  <rect x="72" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#61e4ff"/>
+  <rect x="338" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#294064"/>
+  <rect x="604" y="186" width="250" height="120" rx="12" fill="#15233f" stroke="#294064"/>
+  <rect x="870" y="186" width="250" height="120" rx="12" fill="#2a2418" stroke="#f8bb69"/>
+  <text x="92" y="214" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11">duplicate_request</text>
+  <text x="92" y="238" fill="#eff5ff" font-family="Inter, sans-serif" font-size="15" font-weight="700">Í÷B</text>
+  <text x="624" y="214" fill="#61e4ff" font-family="ui-monospace, monospace" font-size="11">concurrent_consume</text>
+  <text x="624" y="238" fill="#eff5ff" font-family="Inter, sans-serif" font-size="15" font-weight="700">vLˆ9Õ</text>
+  <text x="890" y="214" fill="#f8bb69" font-family="ui-monospace, monospace" font-size="11">guard_disabled_control</text>
+  <text x="890" y="238" fill="#eff5ff" font-family="Inter, sans-serif" font-size="15" font-weight="700">&,ˆk1Hùg</text>
+  <text x="890" y="262" fill="#f8bb69" font-family="Inter, sans-serif" font-size="12">4'ùg · òÀú</text>
+  <rect x="980" y="330" width="140" height="40" rx="9" fill="url(#accent)"/>
+  <text x="1000" y="356" fill="#071326" font-family="Inter, sans-serif" font-size="14" font-weight="700">ĞLŒ</text>
+  <rect x="72" y="400" width="700" height="170" rx="12" fill="#0f192f" stroke="#294064"/>
+  <text x="92" y="430" fill="#eff5ff" font-family="Inter, sans-serif" font-size="15" font-weight="700">Œ‹ööô¿</text>
+  <circle cx="100" cy="468" r="5" fill="#61e4ff"/>
+  <text x="118" y="473" fill="#eff5ff" font-family="Inter, sans-serif" font-size="13">Outbox nâÑ°…ˆ9‹ö</text>
+  <circle cx="100" cy="502" r="5" fill="#58d8a8"/>
+  <text x="118" y="507" fill="#eff5ff" font-family="Inter, sans-serif" font-size="13">&,»ÍóÇYØô</text>
+  <circle cx="100" cy="536" r="5" fill="#f8bb69"/>
+  <text x="118" y="541" fill="#eff5ff" font-family="Inter, sans-serif" font-size="13">ˆk1HòÀúY 200 / &, 0	</text>
+  <rect x="800" y="400" width="320" height="170" rx="12" fill="#162542" stroke="#f8bb69"/>
+  <text x="820" y="430" fill="#f8bb69" font-family="Inter, sans-serif" font-size="14">ˆk1HòÀú</text>
+  <text x="820" y="458" fill="#9aacca" font-family="Inter, sans-serif" font-size="12">ùgï„§ÍYØô</text>
+  <text x="820" y="492" fill="#9aacca" font-family="Inter, sans-serif" font-size="12">©¶Y</text>
+  <text x="980" y="492" fill="#ff7893" font-family="ui-monospace, monospace" font-size="12">200</text>
+  <text x="820" y="520" fill="#9aacca" font-family="Inter, sans-serif" font-size="12">&,A4</text>
+  <text x="980" y="520" fill="#ff7893" font-family="ui-monospace, monospace" font-size="12">0</text>
+</svg>

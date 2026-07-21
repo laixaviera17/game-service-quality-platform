@@ -16,6 +16,7 @@ def test_reliability_experiments_preserve_single_wallet_effect(scenario: str):
     assert report["summary"]["actual"]["ledger_entries"] == 1
     assert report["summary"]["actual"]["balance"] == 100
     assert report["summary"]["actual"]["delivery_statuses"] == ["delivered"]
+    assert any(event["kind"] == "poll" for event in report["events"])
     assert get_reliability_run(run_id) == report
 
 
@@ -29,6 +30,7 @@ def test_reliability_api_exposes_scenarios_run_history_and_timeline():
     assert created.status_code == 201
     report = created.json()
     assert report["summary"]["actual"]["delivery_attempts"] >= 2
+    assert any(event["kind"] == "poll" for event in report["events"])
     assert any(event["kind"] == "retry" for event in report["events"])
     history = client.get("/reliability/runs")
     trend = client.get("/reliability/trend")

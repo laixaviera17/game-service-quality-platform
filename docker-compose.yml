@@ -2,9 +2,9 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: game_quality
-      MYSQL_USER: gameqa
-      MYSQL_PASSWORD: gameqa_dev_password
+      MYSQL_DATABASE: reliability_lab
+      MYSQL_USER: reliability_lab
+      MYSQL_PASSWORD: reliability_lab_dev
       MYSQL_ROOT_PASSWORD: root_dev_password
     ports:
       - "3307:3306"
@@ -30,7 +30,7 @@ services:
     build: .
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment: &app_environment
-      DATABASE_URL: mysql+pymysql://gameqa:gameqa_dev_password@mysql:3306/game_quality
+      DATABASE_URL: mysql+pymysql://reliability_lab:reliability_lab_dev@mysql:3306/reliability_lab
       EXECUTION_MODE: celery
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0

@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from .database import connect, get_engine, initialize_database
+from .outbox import list_pending_outbox_orders
 
 
 REWARD_GEMS = 100
@@ -18,15 +19,15 @@ SCENARIOS = {
     },
     "acknowledgement_loss": {
         "title": "确认丢失后重试",
-        "description": "首次消费已写入账本但确认丢失；重试消费不得再次增加余额。",
+        "description": "Outbox 轮询首次入账后模拟未确认；再次轮询不得重复增加余额。",
     },
     "concurrent_consume": {
         "title": "并行消费尝试",
-        "description": "同一事件被两个并行处理尝试处理；账本唯一约束保证最终只产生一笔入账。",
+        "description": "两个独立 Outbox 轮询任务同时发现同一待消费事件；账本唯一约束只允许一笔入账。",
     },
     "guard_disabled_control": {
         "title": "账本守卫失效对照",
-        "description": "对照路径故意跳过账本写入，验证实验能检出重复余额副作用，而不是永远显示通过。",
+        "description": "阴性对照：故意跳过账本写入，验证断言能检出重复余额副作用。",
     },
 }
 
@@ -118,9 +119,9 @@ def _complete_delivery(connection, order_id: str) -> None:
     )
 
 
-def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = False, synchronize: bool = False, task_id: str | None = None) -> str:
+def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = False, task_id: str | None = None) -> str:
     """Apply a delivery effect. A unique ledger row is the idempotency boundary for consumers."""
-    _event(run_id, "consume", "消费者开始处理 Outbox 事件", order_id=order_id, lose_acknowledgement=lose_acknowledgement, synchronize=synchronize, task_id=task_id)
+    _event(run_id, "consume", "消费者开始处理 Outbox 事件", order_id=order_id, lose_acknowledgement=lose_acknowledgement, task_id=task_id)
     try:
         with connect() as connection:
             order = connection.execute(
@@ -139,8 +140,6 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
                 _complete_delivery(connection, order_id)
                 outcome = "duplicate_consumer"
             else:
-                if synchronize and get_engine().dialect.name == "mysql":
-                    connection.execute(text("SELECT SLEEP(0.15)"))
                 connection.execute(
                     text("""INSERT INTO delivery_wallet_ledger (order_id, player_id, reward_gems, created_at)
                         VALUES (:order_id, :player_id, :reward_gems, :created_at)"""),
@@ -156,7 +155,6 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
                     _complete_delivery(connection, order_id)
                     outcome = "effect_applied"
     except IntegrityError:
-        # Another consumer committed its ledger entry first. This attempt must not touch the balance.
         with connect() as connection:
             connection.execute(
                 text("UPDATE delivery_outbox_events SET attempt_count = attempt_count + 1 WHERE order_id = :order_id"),
@@ -165,7 +163,7 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
             _complete_delivery(connection, order_id)
         outcome = "duplicate_consumer"
     if outcome == "acknowledgement_lost":
-        _event(run_id, "retry", "账本已提交，但模拟确认丢失；消息保持待消费并触发重试", order_id=order_id)
+        _event(run_id, "retry", "账本已提交，但模拟确认丢失；Outbox 仍为 pending 并等待再次轮询", order_id=order_id)
     elif outcome == "duplicate_consumer":
         _event(run_id, "dedupe", "检测到已存在账本流水，跳过余额变更并完成事件", order_id=order_id)
     else:
@@ -173,9 +171,15 @@ def _deliver_once(run_id: int, order_id: str, *, lose_acknowledgement: bool = Fa
     return outcome
 
 
-def consume_delivery_attempt(run_id: int, order_id: str, *, synchronize: bool = False, task_id: str | None = None) -> str:
-    """Entry point for one independent Celery consumer task."""
-    return _deliver_once(run_id, order_id, synchronize=synchronize, task_id=task_id)
+def poll_outbox_event(run_id: int, *, lose_acknowledgement: bool = False, task_id: str | None = None) -> str:
+    """Outbox poller: scan pending events for this run and attempt one delivery."""
+    pending = list_pending_outbox_orders(run_id)
+    if not pending:
+        _event(run_id, "poll", "Outbox 轮询未发现待消费事件", task_id=task_id)
+        return "no_pending_event"
+    order_id = pending[0]
+    _event(run_id, "poll", "Outbox 轮询发现待消费事件", order_id=order_id, pending_count=len(pending), task_id=task_id)
+    return _deliver_once(run_id, order_id, lose_acknowledgement=lose_acknowledgement, task_id=task_id)
 
 
 def _deliver_without_ledger_guard(run_id: int, order_id: str) -> None:
@@ -214,10 +218,13 @@ def _snapshot(run_id: int, player_id: str) -> dict[str, object]:
 def _assert_invariants(run_id: int, player_id: str, scenario: str) -> dict[str, object]:
     actual = _snapshot(run_id, player_id)
     expected = {"orders": 1, "outbox_events": 1, "ledger_entries": 1, "balance": REWARD_GEMS, "delivery_statuses": ["delivered"]}
-    if scenario == "duplicate_request":
-        expected["delivery_attempts_at_least"] = 1
-    else:
+    # concurrent_consume does not use artificial SLEEP. One poller may finish and mark
+    # the event consumed before the other begins, so attempts may be 1 without violating
+    # the wallet invariant. acknowledgement_loss and the negative control always retry.
+    if scenario in {"acknowledgement_loss", "guard_disabled_control"}:
         expected["delivery_attempts_at_least"] = 2
+    else:
+        expected["delivery_attempts_at_least"] = 1
     passed = (
         actual["orders"] == expected["orders"]
         and actual["outbox_events"] == expected["outbox_events"]
@@ -257,22 +264,22 @@ def _finish_reliability_run(run_id: int, player_id: str, scenario: str) -> dict[
 
 
 def finalize_concurrent_reliability_run(run_id: int, player_id: str) -> dict[str, object]:
-    """Celery chord callback: both independent consumer tasks have completed."""
+    """Celery chord callback: both independent Outbox poller tasks have completed."""
     return _finish_reliability_run(run_id, player_id, "concurrent_consume")
 
 
-def _schedule_concurrent_consumers(run_id: int, order_id: str, player_id: str) -> None:
+def _schedule_concurrent_outbox_pollers(run_id: int, player_id: str) -> None:
     from celery import chord, group
 
     from .task_queue import celery_app
 
-    consumers = group(
-        celery_app.signature("app.tasks.consume_delivery_attempt", args=[run_id, order_id, True]),
-        celery_app.signature("app.tasks.consume_delivery_attempt", args=[run_id, order_id, True]),
+    pollers = group(
+        celery_app.signature("app.tasks.poll_outbox_event", args=[run_id]),
+        celery_app.signature("app.tasks.poll_outbox_event", args=[run_id]),
     )
     callback = celery_app.signature("app.tasks.finalize_concurrent_reliability_run", args=[run_id, player_id])
-    chord(consumers)(callback)
-    _event(run_id, "schedule", "已提交两个独立 Celery 消费任务，等待回调任务执行最终断言", order_id=order_id)
+    chord(pollers)(callback)
+    _event(run_id, "schedule", "已提交两个独立 Outbox 轮询任务，等待回调任务执行最终断言", poller_count=2)
 
 
 def _mark_run_failed(run_id: int, error: Exception) -> dict[str, object]:
@@ -303,16 +310,22 @@ def execute_reliability_run(run_id: int) -> dict[str, object]:
             repeated_order, repeated_duplicate = _request_reward(run_id, player_id, f"reliability_{run_id}_request")
             if repeated_order != order_id or not repeated_duplicate or duplicate:
                 raise AssertionError("重复请求没有稳定命中同一张订单")
-            _deliver_once(run_id, order_id)
+            poll_outbox_event(run_id)
         elif scenario == "acknowledgement_loss":
-            _deliver_once(run_id, order_id, lose_acknowledgement=True)
-            _deliver_once(run_id, order_id)
+            poll_outbox_event(run_id, lose_acknowledgement=True)
+            poll_outbox_event(run_id)
         elif scenario == "concurrent_consume":
             if get_engine().dialect.name == "sqlite":
-                _deliver_once(run_id, order_id)
-                _deliver_once(run_id, order_id)
+                # SQLite serializes writers; simulate two pollers that both observed the
+                # same pending event before either finished, then race on that order_id.
+                pending = list_pending_outbox_orders(run_id)
+                if not pending:
+                    raise AssertionError("并发消费场景缺少 pending Outbox 事件")
+                _event(run_id, "poll", "Outbox 轮询发现待消费事件（本地串行仿真双消费者）", order_id=pending[0], pending_count=1)
+                _deliver_once(run_id, pending[0])
+                _deliver_once(run_id, pending[0])
             else:
-                _schedule_concurrent_consumers(run_id, order_id, player_id)
+                _schedule_concurrent_outbox_pollers(run_id, player_id)
                 return get_reliability_run(run_id) or {}
         elif scenario == "guard_disabled_control":
             _deliver_without_ledger_guard(run_id, order_id)
@@ -322,6 +335,19 @@ def execute_reliability_run(run_id: int) -> dict[str, object]:
     except Exception as error:
         return _mark_run_failed(run_id, error)
     return _finish_reliability_run(run_id, player_id, scenario)
+
+
+def wait_for_reliability_run(run_id: int, *, timeout_seconds: float = 30.0, poll_interval: float = 0.5) -> dict[str, object]:
+    """Poll until a run leaves queued/running, or raise TimeoutError."""
+    import time
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        report = get_reliability_run(run_id)
+        if report and report["status"] not in {"queued", "running"}:
+            return report
+        time.sleep(poll_interval)
+    raise TimeoutError(f"可靠性实验 #{run_id} 在 {timeout_seconds}s 内未完成")
 
 
 def get_reliability_run(run_id: int) -> dict[str, object] | None:
